@@ -52,7 +52,7 @@ enQuarriesBuff <- engQuarries[1:50,] %>%
   st_simplify(500, preserveTopology=T) %>% 
   st_union() %>% st_sf
 
-
+save(engQuarries,file='data/engQuarries.RData')
 getLidar2 <- function(bufferedPoly,overwrite=T) {
   # define chrome options
   eCaps <- list(chromeOptions = list(
