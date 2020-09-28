@@ -1,0 +1,92 @@
+require(pdftools)
+require(stringr)
+require(rnrfa)
+require(sf)
+require(leaflet)
+require(dplyr)
+# import PDF
+grid100k <- st_read('data/osgb/OSGB_Grid_100km.shp') %>%
+  st_transform(4326) %>% dplyr::filter(ENGLAND == 't')
+grid5k <- st_read('data/osgb/OSGB_Grid_5km.shp') %>% 
+  st_transform(4326) %>% dplyr::filter(ENGLAND == 't')
+# leaflet() %>% 
+#   leaflet::addProviderTiles("Esri.WorldImagery") %>% 
+#   addPolygons(data = grid5k)
+# grid50k <- st_read('data/OSGB_Grid_50km.shp') %>% 
+#   st_transform(4326)
+
+osgbLetters <- as.character(grid100k$TILE_NAME)
+britPit <- pdftools::pdf_data('DirectoryOfMinesAndQuarries2014.pdf')
+mineAdress <- britPit[32:150]
+
+getGridRefs <- function(mineAdressPage) {
+  tileRefs <- which(mineAdressPage$text %in% osgbLetters)
+  unlist(lapply(tileRefs, function(x) {
+    paste(mineAdressPage$text[x:(x+2)],collapse='')
+  }))
+}
+
+gridRefs <- unlist(lapply(mineAdress,getGridRefs))
+# validate
+gridRefsVal <- gridRefs[str_detect(gridRefs,
+           '^([STNHOstnho][A-Za-z]\\s?)(\\d{5}\\s?\\d{5}|\\d{4}\\s?\\d{4}|\\d{3}\\s?\\d{3}|\\d{2}\\s?\\d{2}|\\d{1}\\s?\\d{1})$')]
+writeLines(gridRefsVal, 'gridRefs.txt')
+quarryCoor <- osg_parse(gridRefsVal, coord_system = 'BNG')
+coorDf <- data.frame(x = quarryCoor$easting,
+                     y = quarryCoor$northing,
+                     grid_ref = gridRefsVal)
+coorSf <- st_as_sf(coorDf,
+              coords = c('x','y'),
+              crs = st_crs(27700))
+
+coorSf$grid_ref_4fig <- 
+  paste0(substr(coorSf$grid_ref,1,3),
+         substr(coorSf$grid_ref,6,6))
+
+tileInters <- st_intersects(st_transform(grid5k,27700),coorSf)
+tileIntersClean <- tileInters[unlist(lapply(tileInters, function(x) length(x) > 0))]
+
+numPoints <- 0
+
+out <- c()
+pointDfs <- list()
+maxQuar <- 30
+for (i in 1:length(tileIntersClean)) {
+  if (length(c(out,tileIntersClean[[i]])) < maxQuar) {
+    out <- c(out,tileIntersClean[[i]])
+  } else {
+    pointDfs[[as.character(i)]] <- 
+      coorSf[out,] %>% 
+      st_buffer(600, endCapStyle="SQUARE") %>% 
+      st_union() %>% 
+      st_simplify(500, preserveTopology=T) 
+    out <- c()
+  }
+}
+
+st_write(pointDfs$`24`,dsn='test.shp',
+         delete_dsn=T)
+
+test <- coorSf[tileIntersClean[[78]],] %>% 
+  st_buffer(600, endCapStyle="SQUARE") %>% 
+  st_simplify(500, preserveTopology=T) %>% 
+  st_write(dsn='test.shp',delete_dsn=T)
+
+test <- coorSf[tileIntersClean[[78]],] %>% 
+  st_buffer(600, endCapStyle="SQUARE") %>% 
+  st_simplify(500, preserveTopology=T)
+plot(test)
+st_area(st_union(test) )
+# %>% 
+#   st_write(dsn='test.shp',delete_dsn=T)
+
+plot(coorSf)
+st_write(quar, dsn='quarries.shp')
+leaflet() %>% 
+  leaflet::addProviderTiles("Esri.WorldImagery") %>% 
+  addPolygons(data = st_transform(grid10k,4326),
+             popup = ~TILE_NAME) %>% 
+  addCircles(data = st_transform(coorSf,4326),
+              label = ~grid_ref_4fig)
+  
+
