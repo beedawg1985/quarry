@@ -1,0 +1,9 @@
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2018-NY94ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2013-NY62nw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2013-NY62sw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2009-NY62nw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2009-NY62sw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2009-NY94ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2008-NY94ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2007-NY62nw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/78d52ab62fd84d1391d468811eb8f9a953276/LIDARTSR/LIDAR-DTM-1M-2007-NY62sw.zip

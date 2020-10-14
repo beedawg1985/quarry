@@ -1,0 +1,9 @@
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2017-SD59se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2010-SD56ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2010-SD56se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2009-SD56ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2009-SD56se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2009-SD59se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2008-SD59se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2006-SD56ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/7dba0e4cc255423e9050e892c11958aa109264/LIDARTSR/LIDAR-DTM-1M-2006-SD56se.zip

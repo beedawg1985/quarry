@@ -1,0 +1,17 @@
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2019-NZ71ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2019-NZ71nw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2017-NZ71ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2017-NZ71nw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2016-NZ52sw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2012-NZ52se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2012-NZ52sw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2012-NZ71ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2012-NZ71nw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2011-NZ52se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2011-NZ52sw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2009-NZ52se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2009-NZ52sw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2009-NZ71ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2009-NZ71nw.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2008-NZ71ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/d6e7da433ea5449d9979bbd94a6d29a5109264/LIDARTSR/LIDAR-DTM-1M-2008-NZ71nw.zip

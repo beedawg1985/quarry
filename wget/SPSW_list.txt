@@ -1,0 +1,6 @@
+https://environment.data.gov.uk/UserDownloads/interactive/1078ab9cb6944c4c86b8cc76803119ba61848/LIDARTSR/LIDAR-DTM-1M-2016-SP20ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/1078ab9cb6944c4c86b8cc76803119ba61848/LIDARTSR/LIDAR-DTM-1M-2016-SP21se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/1078ab9cb6944c4c86b8cc76803119ba61848/LIDARTSR/LIDAR-DTM-1M-2010-SP20ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/1078ab9cb6944c4c86b8cc76803119ba61848/LIDARTSR/LIDAR-DTM-1M-2010-SP21se.zip
+https://environment.data.gov.uk/UserDownloads/interactive/1078ab9cb6944c4c86b8cc76803119ba61848/LIDARTSR/LIDAR-DTM-1M-2009-SP20ne.zip
+https://environment.data.gov.uk/UserDownloads/interactive/1078ab9cb6944c4c86b8cc76803119ba61848/LIDARTSR/LIDAR-DTM-1M-2009-SP21se.zip
