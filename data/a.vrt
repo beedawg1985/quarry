@@ -1,0 +1,272 @@
+<VRTDataset rasterXSize="304000" rasterYSize="508000">
+  <SRS>PROJCS["OSGB 1936 / British National Grid",GEOGCS["OSGB 1936",DATUM["OSGB_1936",SPHEROID["Airy 1830",6377563.396,299.3249646,AUTHORITY["EPSG","7001"]],TOWGS84[446.448,-125.157,542.06,0.15,0.247,0.842,-20.489],AUTHORITY["EPSG","6277"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4277"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",49],PARAMETER["central_meridian",-2],PARAMETER["scale_factor",0.9996012717],PARAMETER["false_easting",400000],PARAMETER["false_northing",-100000],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","27700"]]</SRS>
+  <GeoTransform>  1.9000000000000000e+05,  1.0000000000000000e+00,  0.0000000000000000e+00,  5.6200000000000000e+05,  0.0000000000000000e+00, -1.0000000000000000e+00</GeoTransform>
+  <VRTRasterBand dataType="Float32" band="1">
+    <NoDataValue>-3.4e+38</NoDataValue>
+    <ColorInterp>Gray</ColorInterp>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req1_2014_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="290000" yOff="410000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req1_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="170000" yOff="410000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req10_2012_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="242000" yOff="432000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req10_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="190000" yOff="142000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req11_2014_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="2000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="2000" />
+      <DstRect xOff="286000" yOff="322000" xSize="4000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req11_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="2000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="2000" />
+      <DstRect xOff="254000" yOff="248000" xSize="2000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req13_2007_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="4000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="4000" />
+      <DstRect xOff="198000" yOff="472000" xSize="2000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req14_2012_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="2000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="2000" />
+      <DstRect xOff="174000" yOff="230000" xSize="2000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req14_2014_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="4000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="4000" />
+      <DstRect xOff="302000" yOff="370000" xSize="2000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req15_2007_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="186000" yOff="472000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req16_2017_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="2000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="2000" />
+      <DstRect xOff="140000" yOff="420000" xSize="2000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req17_2007_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="2000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="2000" />
+      <DstRect xOff="200000" yOff="476000" xSize="2000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req17_2015_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="4000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="4000" />
+      <DstRect xOff="164000" yOff="428000" xSize="2000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req18_2015_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="174000" yOff="428000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req2_2014_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="210000" yOff="282000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req2_2018_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="106000" yOff="40000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req22_2017_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="2000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="2000" />
+      <DstRect xOff="164000" yOff="174000" xSize="2000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req23_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="252000" yOff="234000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req25_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="2000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="2000" />
+      <DstRect xOff="236000" yOff="234000" xSize="4000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req27_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="170000" yOff="166000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req3_2015_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="8000" yOff="502000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req3_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="184000" yOff="398000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req3_2017_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="4000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="4000" />
+      <DstRect xOff="146000" yOff="0" xSize="2000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req4_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="236000" yOff="350000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req4_2018_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="4000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="4000" />
+      <DstRect xOff="140000" yOff="130000" xSize="2000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req5_2011_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="2000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="2000" />
+      <DstRect xOff="198000" yOff="272000" xSize="2000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req5_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="4000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="4000" />
+      <DstRect xOff="164000" yOff="0" xSize="2000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req7_2013_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="2000" RasterYSize="2000" DataType="Float32" BlockXSize="2000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="2000" ySize="2000" />
+      <DstRect xOff="174000" yOff="36000" xSize="2000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req7_2015_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="0" yOff="504000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req7_2016_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="2000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="2000" />
+      <DstRect xOff="188000" yOff="144000" xSize="4000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req8_2013_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="2000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="2000" />
+      <DstRect xOff="244000" yOff="272000" xSize="4000" ySize="2000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req9_2012_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="242000" yOff="434000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/a_ras/req9_2014_rep.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="4000" RasterYSize="4000" DataType="Float32" BlockXSize="4000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="4000" ySize="4000" />
+      <DstRect xOff="180000" yOff="268000" xSize="4000" ySize="4000" />
+      <NODATA>-3.4e+38</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>

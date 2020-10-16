@@ -51,7 +51,6 @@ pp <- function(...) {
 }
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
-
 userDataDir <<- '/home/barneyharris/user_quarry_data'
 setwd("/home/barneyharris/projects/quarry")
 
@@ -524,92 +523,134 @@ for (r in toVec) {
   processDiffs(r)
 }
 
-# write AOI poly to DB
-l <- st_layers('data/aoi_poly_wfiles.gpkg')$name
-
-aoi <- lapply(l, function(x) {
-  g <- st_read('data/aoi_poly_wfiles.gpkg',layer=x,crs=27700)
-  if (nrow(g) > 0) g %>% st_sf
-        }) %>% bind_rows()
-
-uk <- st_read('data/ne_10m_coast_uk.shp') %>% 
-  st_transform(27700) %>% 
-  st_cast('POLYGON')
-
-aoi.filt <- aoi %>%
-  # filter(st_area(geometry) > units::as_units(200, "m^2")) %>% 
-  # filter(st_area(geometry) < units::as_units(5000, "m^2")) %>% 
-  st_within(uk) %>% 
-  # dplyr::select(geometry) %>% 
-  mutate(include = NA)
-plot(aoi.filt$geometry)
-st_write(aoi.filt, 'data/aoi_filt.shp')
-st_write_withPkey(con,aoi,schema='quarry','aoi_all')
-st_write_withPkey(con,aoi.filt,schema='quarry','aoi_300_5000')
-st_write_withPkey(con,aoi.filt,schema='quarry','aoi')
-# st_write(aoi.filt,con,c('quarry','aoi'))
-
-
+createMosaic <- function(filelist, trgdir) {
+  
+  # make target directory
+  if (!dir.exists(trgdir)) dir.create(trgdir)
+  
+  # copy tifs to single dir for mosaic WMS layer creation
+  pp('copying source files to single directory...')
+  file.copy(filelist, 
+            paste0(trgdir,'/',basename(filelist)))
+  diffs <- list.files(trgdir,full.names = T,
+                      pattern='*tif')
+  # set crs and overviews on tifs
+  pp('adding CRS and overviews...')
+  lapply(diffs, function(x) {
+    outfile <- str_replace(x,'.tif','_rep.tif')
+    gdal_translate(src_dataset = x,
+            dst_dataset =outfile,
+             a_srs='http://spatialreference.org/ref/epsg/27700/',
+            overwrite=T)
+    gdaladdo(outfile,levels=c(2,4,8,16,32,64))
+    file.remove(x)
+  })
+  
+  # create / update mosaics in GeoServer
+  x <- trgdir
+  
+  # delete pre-existing mosaic index files
+  f <- list.files(x,full.names = T)
+  fRm <- f[!str_detect(f,'tif')]
+  lapply(fRm,function(x) try(system(paste0('rm -f ', x))))
+  # add index properties file
+  inProp <- c('PropertyCollectors=ResolutionExtractorSPI(resolution)',
+              'Schema=*the_geom:Polygon,location:String,resolution:String',
+              'Caching=false',
+              'AbsolutePath=false')
+  write.table(inProp,
+              file=paste0(x,'/indexer.properties'),
+              quote = F,
+              row.names=F,col.names = F)
+  # add new mosaic
+  system2("curl",
+          paste0('-v -u ',
+                 shQuote('admin:geoserver'),
+                 ' -XPUT -H "Content-type: text/plain" ',
+                 '-d ',paste0('"file://',x,'"'),' ',
+                 '"http://localhost:8080/geoserver/rest/workspaces/quarry/coveragestores/',
+                 basename(x),'/external.imagemosaic"'))
+  
+  # edit GeoServer coverage file to set resolution sorting
+  configFolder <- paste0('/usr/share/geoserver/data_dir/workspaces/quarry/',basename(x),
+                         '/')
+  sudoPass <- 'Only/Pass/Week/Track/89!!'
+  # set permissions
+  system(paste0('sudo -kS setfacl -R --set-file=/usr/share/geoserver/data_dir/workspaces/mal/permissions.acl ',
+                configFolder)
+         , input = sudoPass
+         )
+  
+  # restart geoserver
+  system("sudo -kS service geoserver stop", input = sudoPass)
+  system("sudo -kS service geoserver start", input = sudoPass)
+  # 
+}
 allDiffs <- list.files(allDiffDir,full.names = T,pattern='*diff.tif')
 mergedDiffDir <- paste0(userDataDir,'/diffs')
-file.copy(allDiffs, 
-          paste0(mergedDiffDir,'/',basename(allDiffs)))
-diffs <- list.files(mergedDiffDir,full.names = T,
-                    pattern='*tif')
-lapply(diffs, function(x) {
-  gdal_translate(src_dataset = x,
-          dst_dataset =str_replace(x,'.tif','_rep.tif'),
-           a_srs='http://spatialreference.org/ref/epsg/27700/',
-          overwrite=T)
+
+createMosaic(filelist = allDiffs,
+             trgdir = mergedDiffDir)
+
+# manually examine polygons and difference maps to identify 
+# suitable areas for the analyses
+includes <- lapply(st_layers('data/aoi_poly_wfiles_inc.gpkg')$name,
+       function(x) {
+         p <- st_read('data/aoi_poly_wfiles_inc.gpkg',
+                 layer=x) %>% 
+           mutate(layer = x)
+         if (any(names(p) %in% 'include')) {
+           out <- p[p$include=='TRUE',]
+           if (nrow(out) > 0) out else NULL
+         } else NULL
+       }) %>% bind_rows() %>% 
+  mutate_if(is.factor, as.character)
+# populate difference columns
+includes[,c('req','a','b')] <- 
+  str_split_fixed(includes$ras,'_',4)[,1:3]
+includes <- includes %>% 
+  mutate(a_locs = paste0(userDataDir,'/',layer,
+                         '/diffs/',req,'_',a,
+                         '.tif'),
+         b_locs = paste0(userDataDir,'/',layer,
+                         '/diffs/',req,'_',b,
+                         '.tif'))
+
+conPostgres()
+st_write_withPkey(con,includes,schema='quarry',tname='includes')
+
+# manually assess which of the polygons is suitable for interpolation
+inc <- st_read('data/includes.gpkg') %>% 
+  filter(interpolate == T) %>% 
+  mutate_if(is.factor,as.character)
+# buffer selected polygons
+inc.buff <- inc %>% st_buffer(250) %>% 
+  mutate(a_loc = paste(req,a,sep='_'))
+
+st_write(inc.buff,'data/inc_buff.shp',
+           delete_dsn=T)
+
+x <- unique(inc.buff$a_loc)[1]
+lapply(unique(inc.buff$a_loc), function(x) {
+  rasPath <- paste0(userDataDir,'/a_ras/',x,'_rep.tif')
+  system2('grass',
+          paste(shQuote('--tmp-location'),
+                shQuote('EPSG:27700'),
+                shQuote('--exec'),
+                shQuote(paste0(getwd(),'/visualise.py')),
+                shQuote(rasPath),
+                shQuote(maskPolLoc),
+                shQuote('1m'),
+                shQuote(basepath),
+                shQuote('proc'),
+                shQuote('{}'))
+          ,stderr = paste0(getwd(),'/slrm_warnings.txt')
+          )
 })
-repDiffs <- list.files(paste0(mergedDiffDir,'/rep'),full.names = T,
-                    pattern='*tif')
-lapply(repDiffs,gdaladdo,levels=c(2,4,8,16,32,64))
 
-# create / update mosaics in GeoServer
-x <- paste0(mergedDiffDir,'/rep')
+aDir <- paste0(userDataDir,'/a_ras')
+createMosaic(includes$a_locs,aDir)
 
-# delete pre-existing mosaic index files
-f <- list.files(x,full.names = T)
-fRm <- f[!str_detect(f,'tif')]
-lapply(fRm,function(x) try(system(paste0('rm -f ', x))))
-# add index properties file
-inProp <- c('PropertyCollectors=ResolutionExtractorSPI(resolution)',
-            'Schema=*the_geom:Polygon,location:String,resolution:String',
-            'Caching=false',
-            'AbsolutePath=false')
-write.table(inProp,
-            file=paste0(x,'/indexer.properties'),
-            quote = F,
-            row.names=F,col.names = F)
-# add new mosaic
-system2("curl",
-        paste0('-v -u ',
-               shQuote('admin:geoserver'),
-               ' -XPUT -H "Content-type: text/plain" ',
-               '-d ',paste0('"file://',x,'"'),' ',
-               '"http://localhost:8080/geoserver/rest/workspaces/quarry/coveragestores/',
-               basename(x),'/external.imagemosaic"'))
-
-# edit GeoServer coverage file to set resolution sorting
-configFolder <- paste0('/usr/share/geoserver/data_dir/workspaces/quarry/',basename(x),
-                       '/')
-sudoPass <- 'Only/Pass/Week/Track/89!!'
-# set permissions
-system(paste0('sudo -kS setfacl -R --set-file=/usr/share/geoserver/data_dir/workspaces/mal/permissions.acl ',
-              configFolder)
-       , input = sudoPass
-       )
-
-# restart geoserver
-system("sudo -kS service geoserver stop", input = sudoPass)
-system("sudo -kS service geoserver start", input = sudoPass)
-# 
-# plot(coorSf)
-# st_write(quar, dsn='quarries.shp')
-# leaflet() %>% 
-#   leaflet::addProviderTiles("Esri.WorldImagery") %>% 
-#   addPolygons(data = st_transform(pointDfs$`23`,4326))
-  
-  
+bDir <- paste0(userDataDir,'/b_ras')
+createMosaic(includes$b_locs,bDir)
 
