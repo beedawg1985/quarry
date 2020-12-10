@@ -39,3 +39,4 @@ vignettes/*.pdf
 .Renviron
 
 processed_lidar/
+private/

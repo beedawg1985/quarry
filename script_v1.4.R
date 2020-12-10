@@ -35,9 +35,7 @@ conPostgres <- function() {
   
   # create a connection
   # save the password that we can "hide" it as best as we can by collapsing it
-  pw <- {
-    'Only/Pass/Week/Track/89!!'
-  }
+  load('private/pw.RData')
   
   # loads the PostgreSQL driver
   drv <- dbDriver("PostgreSQL")
