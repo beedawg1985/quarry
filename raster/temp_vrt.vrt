@@ -1,0 +1,20 @@
+<VRTDataset rasterXSize="2000" rasterYSize="1000">
+  <SRS>PROJCS["British_National_Grid",GEOGCS["GCS_OSGB_1936",DATUM["OSGB_1936",SPHEROID["Airy_1830",6377563.396,299.3249646]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",400000],PARAMETER["False_Northing",-100000],PARAMETER["Central_Meridian",-2],PARAMETER["Scale_Factor",0.999601272],PARAMETER["Latitude_Of_Origin",49],UNIT["Meter",1]]</SRS>
+  <GeoTransform>  3.8500000000000000e+05,  5.0000000000000000e+00,  0.0000000000000000e+00,  2.9000000000000000e+05,  0.0000000000000000e+00, -5.0000000000000000e+00</GeoTransform>
+  <VRTRasterBand dataType="Float32" band="1">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/edina/terrain-5-dtm_3791534/so/SO88NE.asc</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="1000" RasterYSize="1000" DataType="Float32" BlockXSize="1000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="1000" ySize="1000" />
+      <DstRect xOff="0" yOff="0" xSize="1000" ySize="1000" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="0">/home/barneyharris/user_quarry_data/edina/terrain-5-dtm_3791534/so/SO98NW.asc</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="1000" RasterYSize="1000" DataType="Float32" BlockXSize="1000" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="1000" ySize="1000" />
+      <DstRect xOff="1000" yOff="0" xSize="1000" ySize="1000" />
+    </SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>
