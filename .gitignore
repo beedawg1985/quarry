@@ -40,3 +40,4 @@ vignettes/*.pdf
 
 processed_lidar/
 private/
+large_data/

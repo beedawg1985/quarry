@@ -972,6 +972,31 @@ dummyData <- function() {
   plot(pol, add=T)
 }
 
+# hillshade function
+st_hillshade <- function(st_ras) {
+  slope.aspect <- terrain(as(st_ras, "Raster"),opt=c('slope','aspect'))
+  hs <- hillShade(slope.aspect$slope,slope.aspect$aspect)
+  writeRaster(hs,'raster/hs.tif',overwrite=T)
+  hsSt <- read_stars('raster/hs.tif')
+  return(hsSt)
+}
+
+# st_ras <- a_ras
+st_slopeaspect <- function(st_ras, formatOut='Stars') {
+  st_r <- as(st_ras, "Raster")
+  slope.aspect <- terrain(st_r,opt=c('slope','aspect'))
+  st_r <- mask(st_r,slope.aspect$slope)
+  writeRaster(st_r,'raster/elev.tif',overwrite=T)
+  
+  writeRaster(slope.aspect$slope,'raster/slope.tif',overwrite=T)
+  writeRaster(slope.aspect$aspect,'raster/aspect.tif',overwrite=T)
+  
+  if (formatOut == 'Stars') {
+    output <- read_stars(c('raster/elev.tif','raster/slope.tif','raster/aspect.tif'))
+  } else output <- brick(st_r,slope.aspect$slope,slope.aspect$aspect)
+  return(output)
+}
+
 # train rf model
 # cycle through polygons, cookie cutting and interpolating hole, 
 # finally producing difference map
@@ -1000,7 +1025,7 @@ maskIntDiff <- function(pol) {
   }
   
   # buffer around interpolation polygon to select ras LIDAR tiles
-  b <- 100
+  b <- 20
   
   # load LIDAR rasters as stars objects
   a_ras <- loadRas(pol, b, 'a') # latest survey
@@ -1011,27 +1036,57 @@ maskIntDiff <- function(pol) {
     write_stars(b_ras, 'raster/b_ras.tif',overwrite=T)
     write_stars(a_ras, 'raster/a_ras.tif',overwrite=T)
     
-    # cookie cut interplation mask polygon from A raster and convert
+    # generate slope aspect as raster brick
+    a_ras.sa.r <- st_slopeaspect(a_ras,formatOut ='Raster')
+    
+    # mask a_ras with new maps to lose cells round edges
+  
+    # generate oblique coordinates
+    a_rasOGC <- makeOGC(as(a_ras, "Raster"), 8)
+    a_rasCov.r <- stack(a_ras.sa.r,a_rasOGC)
+    names(a_rasCov.r)[1] <- 'elev'
+    
+    # cookie cut interplation mask polygon A raster and convert
     # resulting raster to SF points for interpolation
-    invMask <- a_ras %>% st_bbox %>% st_as_sfc %>% 
-      st_difference(pol)
-    hole <- a_ras[invMask]
-    names(hole) <- 'elev'
-    hole.sf <- st_as_sf(hole, as_points = TRUE, merge = FALSE)
-    hole.df <- as.data.frame(cbind(elev = hole.sf$elev,st_coordinates(hole.sf)))
+    pol.r <- fasterize::fasterize(pol, raster = raster(a_rasCov.r))
+    hole.r <- mask(a_rasCov.r,pol.r,inverse=T)
+    
+    # hole <- a_ras[invMask]
+    # names(hole) <- 'elev'
+    
+    # convert all to matrix and remove any NA rows
+    hole.m <- cbind(getValues(hole.r),raster::coordinates(hole.r))
+    hole.m[is.nan(hole.m)] <- NA
+    # convert to df
+    hole.df <- as.data.frame(hole.m) %>% na.omit
+    # col order
+    colOrder <- c(c('x','y'),setdiff(names(hole.df),c('x','y')))
+    hole.df <- hole.df %>% dplyr::select(all_of(colOrder))
+    # convert to simple features points
+    hole.sf <- st_as_sf(hole.df,coords=c('x','y'),crs=27700)
+    # plot(hole.sf)
     crs_raster_format <- st_crs(hole.sf,parameters=T)$proj4
-    hole.r <- rasterFromXYZ(hole.df[,c(2,3,1)], crs=crs_raster_format)
+    # convert to sp
+    hole.sp <- as(hole.sf, "Spatial")
     
     # convert a_ras to sf points
-    a_rasSf <- st_as_sf(a_ras, as_points = TRUE, merge = FALSE) %>% 
+    a_rasCov.r.st <- st_as_stars(a_rasCov.r)
+    a_rasSf <- st_as_sf(a_rasCov.r.st, as_points = TRUE, merge = FALSE) %>% 
       dplyr::rename(elev = 1)
     a_rasSp <- as_Spatial(a_rasSf)
     
-    return(list(hole = list(hole.st = hole,
+    writeRaster(hole.r$elev,'raster/elev.tif',overwrite=T)
+    hole.st.elev <- read_stars('raster/elev.tif')
+    st_crs(hole.st.elev) <- st_crs(27700)
+    
+    return(list(hole = list(
                      hole.sf = hole.sf,
                      hole.df = hole.df,
-                     hole.r = hole.r),
+                     hole.r = hole.r,
+                     hole.sp = hole.sp,
+                     hole.st.elev = hole.st.elev),
          ras = list(a_ras = a_ras,
+                    a_rasCov.r = a_rasCov.r,
                     a_rasSf = a_rasSf,
                     a_rasSp = a_rasSp,
                     b_ras = b_ras),
@@ -1041,65 +1096,6 @@ maskIntDiff <- function(pol) {
   
   rasPrep <- prepareRas(a_ras,b_ras,pol)
   
-  getCoarseCov <- function(rasPrep, 
-                           pol, 
-                           covars=c("aspect","geo_azi","geo_extend",
-                                    "geo_intensity","slope")) {
-    if (!is.null(pol$fid)) {
-      # load rasters of 30m-res , co-variate data
-      # check for pre-existing coarse rasters
-      cR <- list.files(file.path(userDataDir,'coarse'),
-                 pattern=paste0(pol$fid,'_fid'))
-      if (length(cR) > 0) {
-      cov <- read_stars(list.files(file.path(userDataDir,'coarse'),
-                                   pattern=paste0(pol$fid,'_fid'),
-                 full.names = T))
-      } else cov <- generateCoVars(pol$fid)$st
-      
-      pp('keeping the following co vars...',
-            paste(covars,collapse=' '))
-      cov <- cov[str_detect(names(cov),paste(covars,collapse='|'))]
-      # sample / clip coarse data by whole a_ras 
-      print('sampling course raster...')
-      covSamp <- st_extract(cov, rasPrep$ras$a_rasSf)
-    } else {
-      covSamp <- rasPrep$ras$a_ras
-    }
-    
-    covOGC <- makeOGC(raster('raster/a_ras.tif') , 8)
-    covOGCdf <- st_as_stars(covOGC) %>% st_as_sf() %>% 
-      st_drop_geometry()
-    
-    a_rasJoin <- rasPrep$ras$a_rasSf
-    
-    a_rasJoin[,names(covOGCsf)[1:8]] <- 
-      covOGCdf[,names(covOGCsf)[1:8]]
-    
-    # join back to original points to retrieve high-res elev values
-    covSampSf <- st_as_sf(covSamp) %>% 
-      st_join(a_rasJoin, st_equals)
-    # lose any points falling within hole
-    covHoleSf <- st_difference(covSampSf,pol) %>% 
-      dplyr::select(names(covSampSf))
-    # convert both to SP
-    covSampSp <- covSampSf %>% as_Spatial()
-    covHoleSp <- covHoleSf %>% as_Spatial()
-    
-    return(list(covSamp = covSamp,
-                covSampSf = covSampSf,
-                covSampSp = covSampSp,
-                covHoleSf = covHoleSf,
-                covHoleSp = covHoleSp)
-           )
-  }
-  
-  coarseDat <- getCoarseCov(rasPrep,pol)
-  
-  # random forest interpolation functions (inputs as SpatialPoints)
-  # intTemplate <- coarseDat$covSampSp
-  # holeObj <- coarseDat$covHoleSp
-  # intTemplate <- rasPrep$ras$a_rasSp
-  # holeObj <- as_Spatial(rasPrep$hole$hole.sf)
   fit_RF <- function(holeObj, intTemplate, tag='',subSample=NULL,
                      classInt=0.1) {
     # sample hole points
@@ -1122,89 +1118,66 @@ maskIntDiff <- function(pol) {
                                     # as.factor(1:nrow(holeObj)) # all elevs
                                     classesElev # groups elev values
                                     )
+    grid.dist0@data <- cbind(grid.dist0@data,gridPix@data)
     
     # hole.ogc <- OGC::makeOGC(hole.r,4)
     # plot(hole.ogc)
-    dn0 <- paste(names(grid.dist0), collapse="+")
-    fm0 <- as.formula(paste("elev ~ ", dn0))
     ov.elev <- over(holeObj["elev"], grid.dist0)
-    rm.elev <- cbind(holeObj@data["elev"], ov.elev)
-    m.elev <- ranger(fm0, rm.elev, quantreg=TRUE, num.trees=150, seed=1)
+    rm.elev <- cbind(holeObj@data, ov.elev)
+    dn0 <- paste(setdiff(names(rm.elev),c('elev','slope','aspect')),
+                 collapse="+")
+    fm0 <- as.formula(paste("elev ~ ", dn0))
+    m.elev <- ranger::ranger(fm0, rm.elev, quantreg=TRUE, num.trees=150, seed=1)
     elev.rfd <- predict(m.elev, grid.dist0@data, type="quantiles")$predictions
     
     intTemplateCopy$pred_elev <- elev.rfd[,2]
+    
     outList <- list(rfSp = rasterFromXYZ(cbind(intTemplateCopy@coords,
                                                intTemplateCopy$pred_elev)))
-    
-    
-    # now with covariates
-    
-    if (length(names(intTemplate)) > 2) { 
-      
-      coVars <- setdiff(names(intTemplate),'elev')
-      print(paste('using covariates...',paste(coVars,collapse=', '),collapse=' '))
-      coVarsFm <- paste(coVars,collapse=' + ')
-      # coVars <- paste(names(intTemplate)[c(1,7)],collapse=' + ')
-      gridPix.spc = GSIF::spc(gridPix, as.formula(paste0("~ ",coVarsFm)))
-      fm1 <- as.formula(paste("elev ~ ", dn0, " + ",
-                              paste(names(gridPix.spc@predicted), collapse = "+")))
-      
-      ov.elev1 <- over(holeObj["elev"], gridPix.spc@predicted)
-      rm.elev1 <- do.call(cbind, list(holeObj@data["elev"], ov.elev, ov.elev1))
-      
-      m1.elev <- ranger(fm1, rm.elev1, importance="impurity",
-                        quantreg=TRUE, num.trees=150, seed=1)
-      
-      grid.dist1 <- grid.dist0
-      grid.dist1@data <- cbind(grid.dist1@data,gridPix.spc@predicted@data)
-      
-      elev.rfd_cov <- predict(m1.elev, grid.dist1@data, type="quantiles")$predictions
-      
-      intTemplateCopy$co_pred_elev <- elev.rfd_cov[,2]
-      outList$rfSpCov <- 
-        rasterFromXYZ(cbind(intTemplateCopy@coords,
-                            intTemplateCopy$co_pred_elev))
-      
-      }
-    # plot(interp_RF_p)
-    # plot(interp_RF_cp)
-    # writeRaster(interp_RF_p,paste0(file='interp_RF_p_',tag,'.tif'),overwrite=T)
-    # writeRaster(interp_RF_cp,file=paste0(file='interp_RF_cp_',tag,'.tif'),overwrite=T)
     
     return(outList)
   }
   
+  coForm <- as.formula(paste0('elev ~ ',
+         paste(setdiff(names(rasPrep$hole$hole.sp@data),'elev'),
+               collapse = '+')))
+  
+  coFormOGC <- as.formula(paste0('elev ~ ',
+                              paste(setdiff(names(rasPrep$hole$hole.sp@data),
+                                            c('elev','slope','aspect') ),
+                                    collapse = '+')))
+  
+  # interpolation models ----
   # Nearest neighbour
   fit_NN <- gstat::gstat( # using package {gstat} 
-    formula = elev ~ 1,    # The column `NH4` is what we are interested in
-    data = as(rasPrep$hole$hole.sf, "Spatial"), # using {sf} and converting to {sp}, which is expected
-    nmax = 20, nmin = 3 # Number of neighboring observations used for the fit
+    formula = elev ~ 1,    
+    data = rasPrep$hole$hole.sp,
+    nmax = 20, nmin = 3,# Number of neighboring observations used for the fit
   )
   
   # Inverse Distance Weighting
   fit_IDW <- gstat::gstat( # The setup here is quite similar to NN
     formula = elev ~ 1,
-    data = as(rasPrep$hole$hole.sf, "Spatial"),
-    nmax = 10, nmin = 3,
+    data = rasPrep$hole$hole.sp,
+    nmax = 20, nmin = 3,
     set = list(idp = 0.5) # inverse distance power
   )
   
   # Generalized Additive Model
   fit_GAM <- mgcv::gam( # using {mgcv}
-    elev ~ s(X, Y),      # here come our X/Y/Z data - straightforward enough
+    elev ~ s(x,y),      # here come our X/Y/Z data - straightforward enough
     data = rasPrep$hole$hole.df     # specify in which object the data is stored
   )
   
   # Triangular Irregular Surface
   fit_TIN <- interp::interp( # using {interp}
-    x = rasPrep$hole$hole.df$X,           # the function actually accepts coordinate vectors
-    y = rasPrep$hole$hole.df$Y,
+    x = rasPrep$hole$hole.df$x,           # the function actually accepts coordinate vectors
+    y = rasPrep$hole$hole.df$y,
     z = rasPrep$hole$hole.df$elev,
     xo = rasPrep$ras$a_rasSp@coords[,1],     # here we already define the target grid
     yo = rasPrep$ras$a_rasSp@coords[,2],
     output = "points"
   ) %>% bind_cols()
-  
   
   ## ordinary kriging
   v_mod_ok <- automap::autofitVariogram(elev~1,input_data =
@@ -1212,18 +1185,26 @@ maskIntDiff <- function(pol) {
   fit_OK = gstat(formula = elev ~ 1, model = v_mod_ok$var_model, 
                  data = rasPrep$hole$hole.sf,
             nmax = 10)
-  
+
   # grass spline implementations
-  
-  fit_GSPLINE <- function(hole) {
-    write_stars(hole,'raster/ras_clip.tif',
+  fit_GSPLINE <- function(hole,pol) {
+    writeRaster(hole[[1]],'raster/ras_clip.tif',
                 overwrite=T)
+    st_write(pol %>% st_buffer(b),dsn='vector/buffpol.gpkg',delete_dsn = T)
+    
     system(paste0('grass ',gdb,' --exec ','r.in.gdal ',
                   'input=',paste0(getwd(),'/raster/ras_clip.tif'),
                   ' output=ras_clip -o --overwrite'))
     system(paste0('grass ',gdb,' --exec ','g.region ',
                   'raster=ras_clip'))
     
+    system(paste0('grass ',gdb,' --exec ','v.in.ogr ',
+                  'input=',paste0(getwd(),'/vector/buffpol.gpkg'),
+                  ' output=vect_clip -o --overwrite'))
+    system(paste0('grass ',gdb,' --exec ','r.mask ',
+                  'vector=vect_clip --overwrite'))
+    
+    intMethod <- 'bilinear'
     intRasters <- lapply(c('bilinear','bicubic','rst'), function(intMethod) {
       system(paste0('grass ',gdb,' --exec ','r.fillnulls ',
                     "input=ras_clip method='",intMethod,"' ",
@@ -1239,10 +1220,7 @@ maskIntDiff <- function(pol) {
       # intMethod <- 'bilinear'
       int_ras <- raster(paste0(getwd(),'/raster/ras_int_',
                                intMethod,'.tif'))
-      
-      # diff_ras <- int_ras - b_ras
-      int_ras <- mask(int_ras,raster('raster/b_ras.tif'))
-      
+      # plot(int_ras)
       # names(diff_ras) <- paste0('int_',x$fid,'_',intMethod)
       return(int_ras)
     })
@@ -1251,64 +1229,58 @@ maskIntDiff <- function(pol) {
     return(intRasters)
   }
   
-  # call functions / extract rasters
+  # call functions / extract rasters ----
   
-  interp_NN <- interpolate(raster('raster/b_ras.tif'), fit_NN)
-  interp_IDW <- interpolate(raster('raster/b_ras.tif'), fit_IDW)
+  interp_NN <- interpolate(rasPrep$ras$a_rasCov.r, fit_NN)
+  interp_IDW <- interpolate(rasPrep$ras$a_rasCov.r, fit_IDW)
   interp_TIN <- raster::rasterFromXYZ(fit_TIN, crs = rasPrep$crs)
+  
   interp_GAM <- rasPrep$ras$a_rasSp@coords %>% as.data.frame() %>% 
-    mutate(X = coords.x1,
-           Y = coords.x2) %>% 
-    mutate(Z = predict(fit_GAM, .)) %>% 
-    dplyr::select(X,Y,Z) %>% 
+    mutate(x = coords.x1,
+           y = coords.x2) %>% 
+    mutate(elev = predict(fit_GAM, .)) %>% 
+    dplyr::select(x,y,elev) %>% 
     rasterFromXYZ(crs = rasPrep$crs)
-  interp_OK <- interpolate(raster('raster/b_ras.tif'), fit_OK)
-  interp_RF <- fit_RF(coarseDat$covHoleSp,
-                      coarseDat$covSampSp,tag='classed')
-  interp_GSPLINE <- fit_GSPLINE(rasPrep$hole$hole.st)
+  
+  interp_OK <- interpolate(rasPrep$ras$a_rasCov.r, fit_OK)
+  
+  interp_RF <- fit_RF(rasPrep$hole$hole.sp,
+                      rasPrep$ras$a_rasSp,tag='classed')
+  interp_GSPLINE <- fit_GSPLINE(rasPrep$hole$hole.r,pol)
   
   # gen list
   rasterlist <- list(
     "Nearest Neighbor" = interp_NN, 
     "Inverse Distance Weighted" = interp_IDW, 
-    "Kriging" = interp_OK, 
+    "Ordinary Kriging" = interp_OK, 
     "Triangular Irregular Surface" = interp_TIN, 
     "Generalized Additive Model" = interp_GAM,
     "Random Forest SP" = interp_RF$rfSp,
-    "Random Forest SPCov" = interp_RF$rfSpCov,
     "GRASS Bilinear Splines" = interp_GSPLINE$bilinear,
     "GRASS Bicubic Splines" = interp_GSPLINE$bicubic,
     "GRASS Regularized Splines Tension" = interp_GSPLINE$rst
   )
   
   # process rasters, clipping, difference and hillshades
-  x <- rasterlist[[1]]
+  x <- rasterlist[[6]]
+  x <- rasterlist$`GRASS Regularized Splines Tension`
   rasterListClip <- lapply(rasterlist, function(x) {
-  print(x)
-    # hillshade function
-    st_hillshade <- function(st_ras) {
-      slope.aspect <- terrain(as(st_ras, "Raster"),opt=c('slope','aspect'))
-      hs <- hillShade(slope.aspect$slope,slope.aspect$aspect)
-      writeRaster(hs,'raster/hs.tif',overwrite=T)
-      hsSt <- read_stars('raster/hs.tif')
-      return(hsSt)
-    }
-    # masked areas only
+    print(x)
+
+    # masked areas only (hole mask)
     intFill <- st_set_crs(st_as_stars(x),st_crs(pol))[pol]
     origFill <- b_ras[pol]
     diffFill <- origFill-intFill
     
-    
     # now full surfaces (masked area + surroundings, clipped by buffer)
-    intSurf <- st_set_crs(st_as_stars(x),st_crs(pol))[pol] %>% 
-      st_mosaic(rasPrep$hole$hole.st)
-    intSurf <- intSurf[pol %>% st_buffer(b)]
+    intSurf <- st_set_crs(st_as_stars(x),st_crs(pol))[pol %>% st_buffer(b)]
     origSurf <- b_ras[pol %>% st_buffer(b)]
     # plot(intSurf)
     # plot(origSurf)
     
     # now difference maps 
     diffSurf <- origSurf-intSurf
+    
     intSurfHs <- st_hillshade(intSurf)
     origSurfHs <- st_hillshade(origSurf)
     
@@ -1332,7 +1304,10 @@ maskIntDiff <- function(pol) {
                 ))
     })
   names(rasterListClip) <- names(rasterlist)
-  
+  return(rasterListClip)
+}
+
+intHoles <- lapply(1:nrow(int), function(x) maskIntDiff(int[x,]))
   
   diffStats <- function(st) {
     vals <- as.vector(st[[1]])
@@ -1345,11 +1320,7 @@ maskIntDiff <- function(pol) {
   
   filldiffsRMSE <- rasterListClip %>% map(c('fill','diff')) %>% 
     map(diffStats)
-  holediffsRMSE <- rasterListClip %>% map(c('hole','diff')) %>% 
-    map(diffStats)
-  
-  plot(rasterListClip$`GRASS Bicubic Splines`$fill$int)
-  plot(rasterListClip$`GRASS Bicubic Splines`$fill$orig)
+ 
   # plotting function
   # pol_overlay <- pol
   # raster_name <- 'Nearest Neighbor'
