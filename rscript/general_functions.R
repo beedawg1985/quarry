@@ -1,3 +1,4 @@
+require(reshape2)
 require(OGC)
 require(RSelenium)
 require(e1071)
@@ -23,6 +24,8 @@ library(viridis)
 require(ggplot2)
 require(purrr)
 require(gridExtra)
+require(doParallel)
+require(future.apply)
 
 userDataDir <<- '/home/barneyharris/user_quarry_data'
 gdb <- paste0(userDataDir,'/grassdb/quarry/PERMANENT/')
@@ -820,7 +823,8 @@ loadLidar <- function(pol,
     theme_bw() + 
     theme(legend.position = 'none',
           axis.title.x = element_blank(),
-          axis.title.y = element_blank()),
+          axis.title.y = element_blank()) + 
+    ggtitle(paste0('DEM A: ',pol$a)),
   ggplot() + 
     geom_stars(data=b_ras) + 
     geom_sf(data=pol,fill=NA,color='white') + 
@@ -828,7 +832,8 @@ loadLidar <- function(pol,
     theme_bw() + 
     theme(legend.position = 'none',
           axis.title.x = element_blank(),
-          axis.title.y = element_blank()),
+          axis.title.y = element_blank()) + 
+    ggtitle(paste0('DEM B: ',pol$b)),
   nrow=1
   )
   
@@ -904,7 +909,8 @@ processTiles <- function(ras,
 
 # trainingRas <- foldA$train
 # testRas <- foldA$all
-interpolateRas <- function(trainingRas, testRas) {
+# cv <- T
+interpolateRas <- function(trainingRas, testRas, maskPoly, cv=FALSE, cvtest=FALSE) {
   # convert rasters into various formats used by interpolation 
   # algorithms
   # r <- trainingRas
@@ -930,9 +936,13 @@ interpolateRas <- function(trainingRas, testRas) {
   
   # interpolation models ----
   
+  # no parameters needed to be trialled for RF and TIN
   # random forest model, uses buffer distances----
   fit_RF <- function(trainingSp, testSp, tag='',subSample=NULL,
                      classInt=0.1) {
+    # save crs from training data
+    spCrs <- crs(trainingSp)
+    
     # sample hole points
     if (!is.null(subSample)) {
       trainingSp <- trainingSp[sample(nrow(trainingSp),subSample),]
@@ -968,38 +978,15 @@ interpolateRas <- function(trainingRas, testRas) {
     intTemplateCopy$pred_elev <- elev.rfd[,2]
     
     outList <- list(rfSp = rasterFromXYZ(cbind(intTemplateCopy@coords,
-                                               intTemplateCopy$pred_elev)))
+                                               intTemplateCopy$pred_elev),
+                                         crs=spCrs))
     
     return(outList)
   }
-  # formula for RF
-  # coForm <- as.formula(paste0('elev ~ ',
-  #                             paste(setdiff(names(rasPrep$hole$hole.sp@data),'elev'),
-  #                                   collapse = '+')))
-  # # formula for RF with oblique coords
-  # coFormOGC <- as.formula(paste0('elev ~ ',
-  #                                paste(setdiff(names(rasPrep$hole$hole.sp@data),
-  #                                              c('elev','slope','aspect') ),
-  #                                      collapse = '+')))
-  # 
+  interp_RF <- fit_RF(trainingSp = trainingData$sp,
+                      testData$sp,tag='classed')
   
-  # simpler interpolation models ----
-  # Nearest neighbour
-  fit_NN <- gstat::gstat( # using package {gstat} 
-    formula = elev ~ 1,    
-    data = trainingData$sp,
-    nmax = 20, nmin = 3,# Number of neighboring observations used for the fit
-  )
-  
-  # Inverse Distance Weighting
-  fit_IDW <- gstat::gstat( # The setup here is quite similar to NN
-    formula = elev ~ 1,
-    data = trainingData$sp,
-    nmax = 20, nmin = 3,
-    set = list(idp = 0.5) # inverse distance power
-  )
-  
-  # Triangular Irregular Surface
+  # Triangular Irregular Surface----
   fit_TIN <- interp::interp( # using {interp}
     x = trainingData$df$X,     # the function actually accepts coordinate vectors
     y = trainingData$df$Y,
@@ -1009,77 +996,169 @@ interpolateRas <- function(trainingRas, testRas) {
     output = "points"
   ) %>% bind_cols()
   
+  interp_TIN <- raster::rasterFromXYZ(fit_TIN, crs = crs(trainingData$sf))
+  
+  # simpler interpolation models ----
+  # cv <- F
+  if (cv) { 
+    plan(multisession, gc = TRUE, workers = 6) ## Run in parallel on local computer
+  }
+  
+  if (cv) {
+    NN_grid <- expand.grid(nmaxVals = seq(20,200,by=20),
+                         nminVals = seq(10,190,by=20)) %>% 
+      filter(nmaxVals > nminVals) %>% 
+      mutate(run = 1:nrow(.),
+             intpol_fid = maskPoly$fid,
+             int_method = 'Nearest Neighbor')
+    if (cvtest) NN_grid <- NN_grid[1:5,]
+    
+  } else NN_grid = data.frame(nmaxVals = 30, nminVals=10, run=1)
+  
+  
+  interp_NNs <- future.apply::future_lapply(NN_grid$run, 
+                                            future.seed=T,
+                                            function(x) {
+    # Nearest neighbour
+    fit_NN <- gstat::gstat( # using package {gstat} 
+      formula = elev ~ 1,    
+      data = trainingData$sp,
+      nmax = NN_grid[x,'nmaxVals'],
+      nmin = NN_grid[x,'nminVals'],# Number of neighboring observations used for the fit
+    )
+    interp_NN <-  raster::interpolate(testData$ras[[1]], fit_NN)
+  })
+  
+  if (cv) {
+    IDW_grid <- expand.grid(nmaxVals = seq(20,200,by=20),
+                           nminVals = seq(10,190,by=20),
+                           idpVals = seq(0.1,1,by=0.1)) %>% 
+      filter(nmaxVals > nminVals) %>% 
+      mutate(run = 1:nrow(.),
+             intpol_fid = maskPoly$fid,
+             int_method = "Inverse Distance Weighted")
+    if (cvtest) IDW_grid <- IDW_grid[1:5,]
+  } else IDW_grid <- data.frame(nmaxVals = 30, nminVals=10, idpVals=0.5, run=1)
+  
+  # IDW_grid <- IDW_grid[1:10,] # test!
+  # x <- IDW_grid$run[1]
+  interp_IDWs <- future_lapply(IDW_grid$run,
+                               future.seed=T,
+                               function(x) {
+  # weird error  -- cased when cv == F
+  # Error in if (d$nmax == Inf) nmax = as.integer(-1) else nmax = as.integer(d$nmax) : 
+  # missing value where TRUE/FALSE needed 
+    print(IDW_grid[x,])
 
+    # Inverse Distance Weighting
+    fit_IDW <- gstat::gstat( # The setup here is quite similar to NN
+      formula = elev ~ 1,
+      data = trainingData$sp,
+      nmax = IDW_grid[x,'nmaxVals'],
+      nmin = IDW_grid[x,'nminVals'],
+      set = list(idp = IDW_grid[x,'idpVals'])) # inverse distance power
+    
+    interp_IDW <- raster::interpolate(testData$ras[[1]], fit_IDW)
+  })
+  
   ## ordinary kriging
   v_mod_ok <- automap::autofitVariogram(elev~1,input_data =
                                           trainingData$sp)
-  fit_OK = gstat(formula = elev ~ 1, model = v_mod_ok$var_model, 
-                 data = trainingData$sp,
-                 nmax = 10)
+  if (cv) {
+    OK_grid <- expand.grid(nmaxVals = seq(10,20,by=2),
+                            nminVals = seq(8,18,by=2))  %>% 
+      filter(nmaxVals > nminVals) %>% 
+      mutate(run = 1:nrow(.),
+             intpol_fid = maskPoly$fid,
+             int_method = "Ordinary Kriging")
+    if (cvtest) OK_grid <- OK_grid[1:5,]
+  } else OK_grid <- data.frame(nmaxVals = 20, nminVals=3, run=1)
+  
+  # not happy running with future_lapply!
+  interp_OKs <- lapply(OK_grid$run,
+                              # future.seed=T,
+                              function(x) {
+    # print(OK_grid[x,])
+    fit_OK = gstat(formula = elev ~ 1, model = v_mod_ok$var_model, 
+                   data = trainingData$sp,
+                   nmax=OK_grid[x,'nmaxVals'],
+                   nmin=OK_grid[x,'nminVals'],)
+    
+    interp_OK <- raster::interpolate(testData$ras[[1]], fit_OK)
+    })
+  
   # grass-based splines model ----
   # training.sf <- trainingData$sf
   # test.r <- testData$ras
-  fit_GSPLINE <- function(training.sf, test.r) {
-    
-    writeRaster(test.r,'raster/ras_clip.tif',
-                overwrite=T)
-    st_write(training.sf, 'vector/training_p.gpkg',delete_dsn=T)
-    
-    system(paste0('grass ',gdb,' --exec ','r.in.gdal ',
-                  'input=',paste0(getwd(),'/raster/ras_clip.tif'),
-                  ' output=ras_clip -o --overwrite'))
-    system(paste0('grass ',gdb,' --exec ','v.in.ogr ',
-                  'input=',paste0(getwd(),'/vector/training_p.gpkg'),
-                  ' output=points_clip --overwrite'))
-    system(paste0('grass ',gdb,' --exec ','g.region ',
-                  'raster=ras_clip'))
-    system(paste0('grass ',gdb,' --exec ','v.surf.rst ',
-                  'input=points_clip ',
-                  'segmax=30 ',
-                  'zcolumn=elev ',
-                  'mask=ras_clip ',
-                  'tension=40 ',
-                  'smooth=0.5 ',
-                  'npmin=180 ',
-                  'elevation=test_ras ',
-                  '--overwrite '))
-    system(paste0('grass ',gdb,' --exec ','r.out.gdal ',
-                  'input=test_ras ',
-                  'output=',getwd(),'/raster/test_int.tif ',
-                  '--overwrite'))
-    
-    r <- raster(paste0(getwd(),'/raster/test_int.tif'))
-    return(r)
-  }
-
-  # call functions / extract rasters ----
   
+  if (cv) {
+    GSPLINE_grid <- expand.grid(tensionVals = seq(0.01,0.1,by=0.02),
+                smoothVals = seq(10,30,by=5),
+                npminVals = seq(100,300,by=20)) %>%  
+      mutate(run = 1:nrow(.),
+             intpol_fid = maskPoly$fid,
+             int_method = "GRASS Regularized Splines Tension")
+    if (cvtest) GSPLINE_grid <- GSPLINE_grid[1:5,]
+  } else GSPLINE_grid <- data.frame(tensionVals=0.05,smoothVals=20,
+                                    npminVals=160,run=1)
   
-  interp_NN <- raster::interpolate(testData$ras[[1]], fit_NN)
-  interp_IDW <- raster::interpolate(testData$ras[[1]], fit_IDW)
+  # GSPLINE_grid <- GSPLINE_grid[1:10,] # test
   
-  interp_TIN <- raster::rasterFromXYZ(fit_TIN, crs = st_crs(trainingData$sf))
-  interp_OK <- raster::interpolate(testData$ras[[1]], fit_OK)
-  interp_RF <- fit_RF(trainingData$sp,
-                      testData$sp,tag='classed')
+  # write test / training to disk
   
-  interp_GSPLINE <- fit_GSPLINE(trainingData$sf,testData$ras[[1]])
-
+  writeRaster(testData$ras[[1]],'raster/ras_clip.tif',
+              overwrite=T)
+  st_write(trainingData$sf[,'elev'], 'vector/training_p.gpkg',
+           delete_dsn=T)
+  
+  # x <- 1
+  future_lapply(GSPLINE_grid$run, function(x) {
+    system2('grass',
+            paste(shQuote('--tmp-location'),
+                  shQuote('EPSG:27700'),
+                  shQuote('--exec'),
+                  shQuote('/home/barneyharris/projects/quarry/python/GRASS_vrst.py'),
+                  shQuote(paste0(getwd(),'/vector/training_p.gpkg')),
+                  shQuote(GSPLINE_grid[x,'smoothVals'] ),
+                  shQuote(GSPLINE_grid[x,'tensionVals']),
+                  shQuote(GSPLINE_grid[x,'npminVals']),
+                  shQuote(paste0(getwd(),'/raster/ras_clip.tif')),
+                  shQuote(x)
+            ),
+            stderr = paste0(getwd(),'/logs/grass_vrst_errout.txt')
+    )
+      return(x)
+  })
+  Sys.sleep(3)
+  # print(GSPLINE_grid$run)
+  interp_GSPLINEs <- lapply(GSPLINE_grid$run, function(x) { 
+    print(paste0('raster/vrst_ras_run',x,'.tif'))
+    raster(paste0('raster/vrst_ras_run',x,'.tif'))
+    })
+  
   # gen list
   rasterlist <- list(
-    "Nearest Neighbor" = interp_NN, 
-    "Inverse Distance Weighted" = interp_IDW, 
-    "Ordinary Kriging" = interp_OK, 
-    "Triangular Irregular Surface" = interp_TIN, 
-    "Random Forest SP" = interp_RF$rfSp,
-    "GRASS Regularized Splines Tension" = interp_GSPLINE
+    "Nearest Neighbor" = list(ras = interp_NNs,
+                              param = NN_grid),
+    "Inverse Distance Weighted" = list(ras = interp_IDWs,
+                                       param = IDW_grid),
+    "Ordinary Kriging" = list(ras = interp_OKs,
+                              param = OK_grid), 
+    "Triangular Irregular Surface" = list(ras = list(interp_TIN)), 
+    "Random Forest SP" = list(ras = list(interp_RF$rfSp)),
+    "GRASS Regularized Splines Tension" = list(ras = interp_GSPLINEs,
+                                               param = GSPLINE_grid)
   )
-  # normalises extents and crops out interpolated corners of rasters
   
+  # normalises extents and crops out interpolated corners of rasters
   rasterlist.c <- lapply(rasterlist, function(x) {
-    mask(crop(extend(x,testData$ras[[1]]),testData$ras[[1]]),
-         testData$ras[[1]])
-         })
+    clean <- function(y) {
+      mask(crop(extend(y,testData$ras[[1]]),testData$ras[[1]]),
+         testData$ras[[1]]) }
+    ras.c <- x$ras %>% map(.f=clean)
+    x$ras <- ras.c
+    return(x)
+    })
   
   return(rasterlist.c)
 }
@@ -1087,7 +1166,7 @@ interpolateRas <- function(trainingRas, testRas) {
 
 # intRasters <- intA
 # foldedRas <- foldA
-# compareRas <- tiles$a
+# compareRas <- tiles$b
 # maskPoly <- pol
 compareInt <- function(intRasters, # list of interpolated rasters
                        foldedRas, # the test/training rasters
@@ -1111,28 +1190,35 @@ compareInt <- function(intRasters, # list of interpolated rasters
   # test data below is essentially the original raster 
   # ep <- pol
   # fr <- foldedRas.r
-  compareEach <- function(interpolated,fr,cr,ep=NULL) {
+  compareEach <- function(raslist,fr,cr,ep=NULL) {
     
-    trainingErr.r <- mask(interpolated,fr$train) - fr$train
-    testErr.r <- mask(interpolated,fr$test) - fr$test
-    compareDiff <- interpolated - cr
-    
-    out <- list(
-        trainingErr.r = trainingErr.r,
-        testErr.r = testErr.r,
-        compareDiff = compareDiff)
-    
-    if (!is.null(ep)) {
-      ep.r <- fasterize::fasterize(ep, fr$test)
-      out$testErr.ex.r <- mask(interpolated,fr$test) - 
-        mask(fr$test,ep.r,inverse=T)
-      out$testErr.inc.r <- mask(interpolated,fr$test) - 
-        mask(fr$test,ep.r)
-      out$compareDiff.inc.r <- interpolated - mask(cr,ep.r)
-      out$compareDiff.ex.r <- interpolated - mask(cr,ep.r,inverse=T)
+    compFunction <- function(interpolated) {
+      
+      trainingErr.r <- mask(interpolated,fr$train) - fr$train
+      testErr.r <- mask(interpolated,fr$test) - fr$test
+      compareDiff <- interpolated - cr
+      
+      out <- list(
+          trainingErr.r = trainingErr.r,
+          testErr.r = testErr.r,
+          compareDiff = compareDiff)
+      
+      if (!is.null(ep)) {
+        ep.r <- fasterize::fasterize(ep, fr$test)
+        out$testErr.ex.r <- mask(interpolated,fr$test) - 
+          mask(fr$test,ep.r,inverse=T)
+        out$testErr.inc.r <- mask(interpolated,fr$test) - 
+          mask(fr$test,ep.r)
+        out$compareDiff.inc.r <- interpolated - mask(cr,ep.r)
+        out$compareDiff.ex.r <- interpolated - mask(cr,ep.r,inverse=T)
+      }
+      
+      return(out)
     }
     
-    return(out)
+    updatedRas <- raslist$ras %>% map(~compFunction(.x))
+    # raslist$ras.comp <- updatedRas
+    # return(raslist)
   }
   
   diffMaps <- intRasters %>% 
@@ -1140,19 +1226,48 @@ compareInt <- function(intRasters, # list of interpolated rasters
                      fr = foldedRas.r,
                      cr = compareRas.r,
                      ep = maskPoly))
+
   
   # diffMaps$`Nearest Neighbor`$compare$compareDiff
   # plot(stack(diffMaps$`Triangular Irregular Surface`))
   # r <- diffMaps$`Ordinary Kriging`$trainingErr.r
   calcRMSEfromRas <- function(r) sqrt(cellStats(r^2,mean))
-  diffRMSEs <- diffMaps %>% map_df(map, calcRMSEfromRas) %>% 
-    mutate(int_method = names(diffMaps))
+  
+  
+  
+  diffRMSEs <- lapply(names(diffMaps), function(x) {
+    diffRMSEs <- diffMaps[[x]] %>% map_df(map, calcRMSEfromRas) %>% 
+    mutate(int_method = x,
+           run_no = 1:nrow(.))
+  }) %>% bind_rows()
+  
   # add pol fid if pol provided
-  if (!is.null(maskPoly)) diffRMSEs %>% 
+  if (!is.null(maskPoly)) diffRMSEs <- diffRMSEs %>% 
     mutate(intpol_fid = maskPoly$fid)
   
-  return(list(maps = diffMaps,
+  return(list(orig.maps = intRasters,
+              diff.maps = diffMaps,
               rmses = diffRMSEs))
+}
+
+visData <- function(dat) {
+  rmses.df <- dat$rmses
+  
+  # first plots of CV data (if it exists)
+  if (nrow(dat$orig.maps$`Nearest Neighbor`$param) > 1) {
+    params <- dat$orig.maps %>% map(pluck,'param')
+    params[unlist(lapply(params,function(x) length(x) == 0))] <- NULL
+    flatten(params)
+    params %>% map_df(flatten)
+    rmses.df
+  }
+  
+  dat$orig.maps %>% map_df('param') 
+  
+  rmsesByMethod <- split(dat$rmses, dat$rmses$int_method)
+  rmsesByMethod %>% map(left_join, .x, )
+  
+  
 }
 
 # cross validation check
@@ -1190,8 +1305,7 @@ crossValidateSplines <- function(ras, tensionVals = seq(0.01,0.1,by=0.01),
   pointsLoc <- paste0(getwd(),'/vector/op_points.gpkg')
   
   # optimise these parameters
-  require(doParallel)
-  require(future.apply)
+  
   # starter params
   # tensionVals <- seq(10,200,by=10)
   # smoothVals <- seq(0.1,1,by=0.1)
