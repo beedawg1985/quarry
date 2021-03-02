@@ -14,7 +14,7 @@ def my_print(text):
     sys.stdout.write('\n' + str(text))
     sys.stdout.flush()
 
-def runInt(pointsLoc,smoothVal,tensionVal,npminVal,maskLoc,runNo):
+def runInt(pointsLoc,smoothVal,tensionVal,npminVal,maskLoc,runNo,polfid):
   my_print('importing points...')
   grass.run_command("v.in.ogr", overwrite=True, input=pointsLoc, \
                     output='points',\
@@ -35,8 +35,8 @@ def runInt(pointsLoc,smoothVal,tensionVal,npminVal,maskLoc,runNo):
                     overwrite=True)
   grass.run_command("r.out.gdal",\
                     input='int',\
-                    output='/home/barneyharris/projects/quarry/raster/vrst_ras_run' + \
-                    runNo + '.tif',\
+                    output='/home/barneyharris/projects/quarry/raster/gspline_int_intfid_' + \
+                    polfid + '_runnum_' + runNo + '.tif',
                     overwrite=True)
   return
    
@@ -47,5 +47,6 @@ tensionVal = sys.argv[3]
 npminVal = sys.argv[4]
 maskLoc = sys.argv[5]
 runNo = sys.argv[6]
+polfid = sys.argv[7]
 
-runInt(pointsLoc,smoothVal,tensionVal,npminVal,maskLoc,runNo)
+runInt(pointsLoc,smoothVal,tensionVal,npminVal,maskLoc,runNo,polfid)

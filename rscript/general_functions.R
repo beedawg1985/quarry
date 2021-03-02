@@ -1,3 +1,5 @@
+
+require(ggforce)
 require(reshape2)
 require(OGC)
 require(RSelenium)
@@ -26,6 +28,7 @@ require(purrr)
 require(gridExtra)
 require(doParallel)
 require(future.apply)
+require(rayshader)
 
 userDataDir <<- '/home/barneyharris/user_quarry_data'
 gdb <- paste0(userDataDir,'/grassdb/quarry/PERMANENT/')
@@ -774,10 +777,10 @@ st_slopeaspect <- function(st_ras, formatOut='Stars') {
   } else output <- brick(st_r,slope.aspect$slope,slope.aspect$aspect)
   return(output)
 }
-
+# pol <- int[1,]
 loadLidar <- function(pol, 
-                    bufferDem=50, # how much DEM around hole to include?
-                    offsetPol=F) {
+                      bufferDem=50, # how much DEM around hole to include?
+                      offsetPol=F) {
   # buffer around interpolation polygon to select ras LIDAR tiles
   b <- bufferDem
   
@@ -814,27 +817,27 @@ loadLidar <- function(pol,
   
   a_ras <- loadRas(pol, b, 'a') # latest survey
   b_ras <- loadRas(pol, b, 'b') # earliest survey
-
+  
   gridExtra::grid.arrange(
-  ggplot() + 
-    geom_stars(data=a_ras) + 
-    geom_sf(data=pol,fill=NA,color='white') + 
-    coord_sf(datum = sf::st_crs(27700)) + 
-    theme_bw() + 
-    theme(legend.position = 'none',
-          axis.title.x = element_blank(),
-          axis.title.y = element_blank()) + 
-    ggtitle(paste0('DEM A: ',pol$a)),
-  ggplot() + 
-    geom_stars(data=b_ras) + 
-    geom_sf(data=pol,fill=NA,color='white') + 
-    coord_sf(datum = sf::st_crs(27700)) + 
-    theme_bw() + 
-    theme(legend.position = 'none',
-          axis.title.x = element_blank(),
-          axis.title.y = element_blank()) + 
-    ggtitle(paste0('DEM B: ',pol$b)),
-  nrow=1
+    ggplot() + 
+      geom_stars(data=a_ras) + 
+      geom_sf(data=pol,fill=NA,color='white') + 
+      coord_sf(datum = sf::st_crs(27700)) + 
+      theme_bw() + 
+      theme(legend.position = 'none',
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank()) + 
+      ggtitle(paste0('DEM A: ',pol$a)),
+    ggplot() + 
+      geom_stars(data=b_ras) + 
+      geom_sf(data=pol,fill=NA,color='white') + 
+      coord_sf(datum = sf::st_crs(27700)) + 
+      theme_bw() + 
+      theme(legend.position = 'none',
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank()) + 
+      ggtitle(paste0('DEM B: ',pol$b)),
+    nrow=1
   )
   
   return(list(a = a_ras,
@@ -853,12 +856,14 @@ processTiles <- function(ras,
                          addOGC=T,
                          addSlopeAspect=T) {
   
-  # # generate slope aspect as raster brick
+  # generate slope aspect as raster brick
   ras.sa.r <- st_slopeaspect(ras,formatOut ='Raster')
-  # 
+  #
   # # generate oblique coordinates
   ras.ogc.r <- makeOGC(as(ras, "Raster"), 8)
   ras.r <- stack(ras.sa.r,ras.ogc.r)
+  
+  # ras.r <- as(ras, "Raster")
   names(ras.r)[1] <- 'elev'
   
   # cookie cut interplation mask polygon A raster and convert
@@ -901,22 +906,15 @@ processTiles <- function(ras,
                   st_crs(ras.st) <- st_crs(27700)
                   return(ras.st)
                 })
-  return(out)
-}
-
-# mode = 1: process prepared raster as is and compare interpolated
-# surface to both B raster and A raster (itself)
-
-# trainingRas <- foldA$train
-# testRas <- foldA$all
-# cv <- T
-interpolateRas <- function(trainingRas, testRas, maskPoly, cv=FALSE, cvtest=FALSE) {
-  # convert rasters into various formats used by interpolation 
-  # algorithms
-  # r <- trainingRas
+  
   convertStars <- function(r) {
-    r.sf <-  st_as_sf(r, merge=F, as_points = T) %>% 
+    r.sf <-  st_as_sf(r, merge=F, as_points = T) %>%
       dplyr::rename(elev = 1) %>% na.omit() # simple feature points
+    
+    # r.sf <- 
+    #   st_as_sf(raster::rasterToPoints(as(r, 'Raster'),spatial=T)) %>% 
+    #   dplyr::rename(elev = 1) %>% na.omit() # simple feature points
+    
     st_crs(r.sf) <- st_crs(27700)
     r.df <-  st_drop_geometry(r.sf) %>% 
       cbind(st_coordinates(r.sf)) # data.frame
@@ -929,10 +927,31 @@ interpolateRas <- function(trainingRas, testRas, maskPoly, cv=FALSE, cvtest=FALS
                 df = r.df,
                 sp = r.sp,
                 ras = r.ras))
-    }
+  }
   # convert data
-  trainingData <- convertStars(trainingRas)
-  testData <- convertStars(testRas)
+  
+  
+  out$train <- convertStars(out$train)
+  out$all <- convertStars(out$all)
+  
+  return(out)
+}
+
+# mode = 1: process prepared raster as is and compare interpolated
+# surface to both B raster and A raster (itself)
+
+# trainingRas <- foldA$train
+# testRas <- foldA$all
+# cv <- T
+# paramData <- cvGrids
+# pd <- prepData[[1]]
+# trainingRas <- pd$foldA$train
+# testRas <- pd$foldA$all
+# maskPoly = pd$pol
+interpolateRas <- function(trainingData, testData, maskPoly, paramData,
+                           testCV = T,
+                           outputDir = '/media/mal/working_files/quarry/',
+                           outputTag='testnew') {
   
   # interpolation models ----
   
@@ -998,210 +1017,196 @@ interpolateRas <- function(trainingRas, testRas, maskPoly, cv=FALSE, cvtest=FALS
   
   interp_TIN <- raster::rasterFromXYZ(fit_TIN, crs = crs(trainingData$sf))
   
-  # simpler interpolation models ----
-  # cv <- F
-  if (cv) { 
-    plan(multisession, gc = TRUE, workers = 6) ## Run in parallel on local computer
-  }
+  # parameterised interpolation models ----
   
-  if (cv) {
-    NN_grid <- expand.grid(nmaxVals = seq(20,200,by=20),
-                         nminVals = seq(10,190,by=20)) %>% 
-      filter(nmaxVals > nminVals) %>% 
-      mutate(run = 1:nrow(.),
-             intpol_fid = maskPoly$fid,
-             int_method = 'Nearest Neighbor')
-    if (cvtest) NN_grid <- NN_grid[1:5,]
-    
-  } else NN_grid = data.frame(nmaxVals = 30, nminVals=10, run=1)
+  # process CV grids to remove bad combinations (nmin vals > nmax vals)
+  # and add run number, add polygon id
+  # df <- paramData$nn
+  paramData.c <- 
+    paramData %>% 
+    map2(.y = names(paramData), 
+         .f = function(df, y) {
+           if (any(str_detect(names(df),'nmaxVals')) && 
+               any(str_detect(names(df),'nminVals'))) {
+             df <- df %>% filter(nminVals < nmaxVals) }
+           df <- df %>% 
+             mutate(run_no = 1:nrow(.),
+                    intpol_fid = maskPoly$fid,
+                    int_method = y)
+           if (testCV) df <- df[1:5,]
+           return(df)
+         })
   
+  interp_NNs <- 
+    lapply(paramData.c$nn$run_no, 
+           function(x) {
+             pdata <- paramData.c$nn %>% 
+               filter(run_no == x)
+             print(pdata)
+             # Nearest neighbour
+             fit_NN <- gstat::gstat( # using package {gstat} 
+               formula = elev ~ 1,    
+               data = trainingData$sp,
+               nmax = pdata$nmaxVals,
+               nmin = pdata$nminVals,# Number of neighboring observations used for the fit
+             )
+             interp_NN <-  raster::interpolate(testData$ras[[1]], fit_NN)
+           })
   
-  interp_NNs <- future.apply::future_lapply(NN_grid$run, 
-                                            future.seed=T,
-                                            function(x) {
-    # Nearest neighbour
-    fit_NN <- gstat::gstat( # using package {gstat} 
-      formula = elev ~ 1,    
-      data = trainingData$sp,
-      nmax = NN_grid[x,'nmaxVals'],
-      nmin = NN_grid[x,'nminVals'],# Number of neighboring observations used for the fit
-    )
-    interp_NN <-  raster::interpolate(testData$ras[[1]], fit_NN)
-  })
-  
-  if (cv) {
-    IDW_grid <- expand.grid(nmaxVals = seq(20,200,by=20),
-                           nminVals = seq(10,190,by=20),
-                           idpVals = seq(0.1,1,by=0.1)) %>% 
-      filter(nmaxVals > nminVals) %>% 
-      mutate(run = 1:nrow(.),
-             intpol_fid = maskPoly$fid,
-             int_method = "Inverse Distance Weighted")
-    if (cvtest) IDW_grid <- IDW_grid[1:5,]
-  } else IDW_grid <- data.frame(nmaxVals = 30, nminVals=10, idpVals=0.5, run=1)
-  
-  # IDW_grid <- IDW_grid[1:10,] # test!
-  # x <- IDW_grid$run[1]
-  interp_IDWs <- future_lapply(IDW_grid$run,
-                               future.seed=T,
-                               function(x) {
-  # weird error  -- cased when cv == F
-  # Error in if (d$nmax == Inf) nmax = as.integer(-1) else nmax = as.integer(d$nmax) : 
-  # missing value where TRUE/FALSE needed 
-    print(IDW_grid[x,])
-
-    # Inverse Distance Weighting
-    fit_IDW <- gstat::gstat( # The setup here is quite similar to NN
-      formula = elev ~ 1,
-      data = trainingData$sp,
-      nmax = IDW_grid[x,'nmaxVals'],
-      nmin = IDW_grid[x,'nminVals'],
-      set = list(idp = IDW_grid[x,'idpVals'])) # inverse distance power
-    
-    interp_IDW <- raster::interpolate(testData$ras[[1]], fit_IDW)
-  })
+  interp_IDWs <- 
+    lapply(paramData.c$idw$run_no,
+           function(x) {
+             pdata <- paramData.c$idw %>% 
+               filter(run_no == x)
+             
+             # Inverse Distance Weighting
+             fit_IDW <- gstat::gstat( # The setup here is quite similar to NN
+               formula = elev ~ 1,
+               data = trainingData$sp,
+               nmax = pdata$nmaxVals,
+               nmin = pdata$nminVals,
+               set = list(idp = pdata$idpVals)) # inverse distance power
+             
+             interp_IDW <- raster::interpolate(testData$ras[[1]], fit_IDW)
+           })
   
   ## ordinary kriging
   v_mod_ok <- automap::autofitVariogram(elev~1,input_data =
                                           trainingData$sp)
-  if (cv) {
-    OK_grid <- expand.grid(nmaxVals = seq(10,20,by=2),
-                            nminVals = seq(8,18,by=2))  %>% 
-      filter(nmaxVals > nminVals) %>% 
-      mutate(run = 1:nrow(.),
-             intpol_fid = maskPoly$fid,
-             int_method = "Ordinary Kriging")
-    if (cvtest) OK_grid <- OK_grid[1:5,]
-  } else OK_grid <- data.frame(nmaxVals = 20, nminVals=3, run=1)
   
   # not happy running with future_lapply!
-  interp_OKs <- lapply(OK_grid$run,
-                              # future.seed=T,
-                              function(x) {
-    # print(OK_grid[x,])
-    fit_OK = gstat(formula = elev ~ 1, model = v_mod_ok$var_model, 
-                   data = trainingData$sp,
-                   nmax=OK_grid[x,'nmaxVals'],
-                   nmin=OK_grid[x,'nminVals'],)
-    
-    interp_OK <- raster::interpolate(testData$ras[[1]], fit_OK)
-    })
+  interp_OKs <- 
+    lapply(paramData.c$ok$run_no,
+           function(x) {
+             pdata <- paramData.c$ok %>% 
+               filter(run_no == x)
+             # print(OK_grid[x,])
+             fit_OK = gstat(formula = elev ~ 1, model = v_mod_ok$var_model, 
+                            data = trainingData$sp,
+                            nmax=pdata$nmaxVals,
+                            nmin=pdata$nminVals)
+             interp_OK <- raster::interpolate(testData$ras[[1]], fit_OK)
+           })
   
   # grass-based splines model ----
   # training.sf <- trainingData$sf
   # test.r <- testData$ras
   
-  if (cv) {
-    GSPLINE_grid <- expand.grid(tensionVals = seq(0.01,0.1,by=0.02),
-                smoothVals = seq(10,30,by=5),
-                npminVals = seq(100,300,by=20)) %>%  
-      mutate(run = 1:nrow(.),
-             intpol_fid = maskPoly$fid,
-             int_method = "GRASS Regularized Splines Tension")
-    if (cvtest) GSPLINE_grid <- GSPLINE_grid[1:5,]
-  } else GSPLINE_grid <- data.frame(tensionVals=0.05,smoothVals=20,
-                                    npminVals=160,run=1)
-  
-  # GSPLINE_grid <- GSPLINE_grid[1:10,] # test
-  
-  # write test / training to disk
-  
-  writeRaster(testData$ras[[1]],'raster/ras_clip.tif',
+  # write raster as gdal for GRASS
+  writeRaster(testData$ras[[1]],
+              paste0('raster/intout_',maskPoly$fid,'_ras_clip.tif'),
               overwrite=T)
-  st_write(trainingData$sf[,'elev'], 'vector/training_p.gpkg',
+  
+  st_write(trainingData$sf[,'elev'], 
+           paste0('vector/intout_',maskPoly$fid,'_training.gpkg'),
            delete_dsn=T)
   
   # x <- 1
-  future_lapply(GSPLINE_grid$run, function(x) {
+  interp_GSPLINEs <- lapply(paramData.c$gspline$run_no, function(x) {
+    pdata <- paramData.c$gspline %>% 
+      filter(run_no == x)
     system2('grass',
             paste(shQuote('--tmp-location'),
                   shQuote('EPSG:27700'),
                   shQuote('--exec'),
                   shQuote('/home/barneyharris/projects/quarry/python/GRASS_vrst.py'),
-                  shQuote(paste0(getwd(),'/vector/training_p.gpkg')),
-                  shQuote(GSPLINE_grid[x,'smoothVals'] ),
-                  shQuote(GSPLINE_grid[x,'tensionVals']),
-                  shQuote(GSPLINE_grid[x,'npminVals']),
-                  shQuote(paste0(getwd(),'/raster/ras_clip.tif')),
-                  shQuote(x)
+                  shQuote(paste0(getwd(),'/vector/intout_',maskPoly$fid,'_training.gpkg')),
+                  shQuote(pdata$smoothVals),
+                  shQuote(pdata$tensionVals),
+                  shQuote(pdata$nminVals),
+                  shQuote(paste0(getwd(),'/raster/intout_',maskPoly$fid,'_ras_clip.tif')),
+                  shQuote(x),
+                  shQuote(pdata$intpol_fid)
             ),
-            stderr = paste0(getwd(),'/logs/grass_vrst_errout.txt')
+            stderr = paste0(getwd(),'/logs/grass_vrst_errout_',
+                            pdata$intpol_fid,'.txt')
     )
-      return(x)
+    r <- raster(paste0('raster/gspline_int_intfid_',pdata$intpol_fid,
+                       '_runnum_',x,'.tif'))
+    # file.remove(paste0('raster/gspline_int_intfid_',pdata$intpol_fid,
+    #                    '_runnum_',x,'.tif'))
+    return(r)
   })
-  Sys.sleep(3)
-  # print(GSPLINE_grid$run)
-  interp_GSPLINEs <- lapply(GSPLINE_grid$run, function(x) { 
-    print(paste0('raster/vrst_ras_run',x,'.tif'))
-    raster(paste0('raster/vrst_ras_run',x,'.tif'))
-    })
   
+  # output parameters as melted df
+  paramsCv <- paramData.c %>% 
+    map_df(~reshape2::melt(.x,
+                           id.vars=c('run_no','intpol_fid',
+                                     'int_method')))
   # gen list
   rasterlist <- list(
-    "Nearest Neighbor" = list(ras = interp_NNs,
-                              param = NN_grid),
-    "Inverse Distance Weighted" = list(ras = interp_IDWs,
-                                       param = IDW_grid),
-    "Ordinary Kriging" = list(ras = interp_OKs,
-                              param = OK_grid), 
-    "Triangular Irregular Surface" = list(ras = list(interp_TIN)), 
-    "Random Forest SP" = list(ras = list(interp_RF$rfSp)),
-    "GRASS Regularized Splines Tension" = list(ras = interp_GSPLINEs,
-                                               param = GSPLINE_grid)
-  )
+    "Nearest Neighbor" = interp_NNs
+    ,"Inverse Distance Weighted" = interp_IDWs
+    ,"Ordinary Kriging" = interp_OKs
+    ,"Triangular Irregular Surface" = list(interp_TIN)
+    ,"Random Forest SP" = list(interp_RF$rfSp)
+    ,"GRASS Regularized Splines Tension" = interp_GSPLINEs
+  ) %>% 
+    map( ~map(.x, .f = function(r) {
+      mask(crop(extend(r,testData$ras[[1]]),testData$ras[[1]]),
+           testData$ras[[1]])
+    }))
   
-  # normalises extents and crops out interpolated corners of rasters
-  rasterlist.c <- lapply(rasterlist, function(x) {
-    clean <- function(y) {
-      mask(crop(extend(y,testData$ras[[1]]),testData$ras[[1]]),
-         testData$ras[[1]]) }
-    ras.c <- x$ras %>% map(.f=clean)
-    x$ras <- ras.c
-    return(x)
-    })
+  print(paste0('completed pol id...',maskPoly$fid))
+  out <- list(ras = rasterlist,
+              params.m = paramsCv)
   
-  return(rasterlist.c)
+  # save(out,
+  #         file=paste0(outputDir,'intA_',outputTag,'_polfid',maskPoly$fid,'.RDS'))
+  return(out)
 }
+
 
 
 # intRasters <- intA
 # foldedRas <- foldA
 # compareRas <- tiles$b
 # maskPoly <- pol
+
 compareInt <- function(intRasters, # list of interpolated rasters
                        foldedRas, # the test/training rasters
                        compareRas, # another raster to compare int surfaces with
                        maskPoly=NULL # a polygon to exclude from testErr calculations
-                       ) {
-  # convert all to raster format, if required
-  foldedRas.r <- lapply(foldedRas, function(x) {
-    x.r <- as(x, 'Raster')
-    x.out <- x.r[[1]]
-  }) 
+) {
+  
+  
+  # # convert all to raster format, if required
+  # foldedRas.r <- lapply(foldedRas, function(x) {
+  #   x.r <- as(x, 'Raster')
+  #   x.out <- x.r[[1]]
+  # }) 
   
   if (class(compareRas)=='stars') {
     compareRas.r <- as(compareRas, 'Raster')
     compareRas.r <- compareRas.r[[1]]
   }
   
+  frtest <- as(foldedRas$test,'Raster')
+  foldedRas$test <- frtest$layer.1
+  
+  
   # training error is difference between original training data and modelled training data
   # test error is difference between original test data and modelled test data
   
   # test data below is essentially the original raster 
-  # ep <- pol
-  # fr <- foldedRas.r
+  # ep <- pd$pol
+  # fr <- foldedRas
+  # cr <- compareRas.r
   compareEach <- function(raslist,fr,cr,ep=NULL) {
     
+    # raslist <- intRasters$ras$`Nearest Neighbor`
+    # interpolated <- raslist[[1]]
     compFunction <- function(interpolated) {
       
-      trainingErr.r <- mask(interpolated,fr$train) - fr$train
+      trainingErr.r <- mask(interpolated,fr$train$ras$layer.1) - 
+        fr$train$ras$layer.1
       testErr.r <- mask(interpolated,fr$test) - fr$test
       compareDiff <- interpolated - cr
       
       out <- list(
-          trainingErr.r = trainingErr.r,
-          testErr.r = testErr.r,
-          compareDiff = compareDiff)
+        trainingErr.r = trainingErr.r,
+        testErr.r = testErr.r,
+        compareDiff = compareDiff)
       
       if (!is.null(ep)) {
         ep.r <- fasterize::fasterize(ep, fr$test)
@@ -1216,29 +1221,27 @@ compareInt <- function(intRasters, # list of interpolated rasters
       return(out)
     }
     
-    updatedRas <- raslist$ras %>% map(~compFunction(.x))
+    updatedRas <- raslist %>% map(~compFunction(.x))
     # raslist$ras.comp <- updatedRas
     # return(raslist)
   }
   
-  diffMaps <- intRasters %>% 
+  diffMaps <- intRasters$ras %>% 
     map(~compareEach(.x, 
-                     fr = foldedRas.r,
+                     fr = foldedRas,
                      cr = compareRas.r,
                      ep = maskPoly))
-
+  
   
   # diffMaps$`Nearest Neighbor`$compare$compareDiff
   # plot(stack(diffMaps$`Triangular Irregular Surface`))
   # r <- diffMaps$`Ordinary Kriging`$trainingErr.r
   calcRMSEfromRas <- function(r) sqrt(cellStats(r^2,mean))
   
-  
-  
   diffRMSEs <- lapply(names(diffMaps), function(x) {
     diffRMSEs <- diffMaps[[x]] %>% map_df(map, calcRMSEfromRas) %>% 
-    mutate(int_method = x,
-           run_no = 1:nrow(.))
+      mutate(int_method = x,
+             run_no = 1:nrow(.))
   }) %>% bind_rows()
   
   # add pol fid if pol provided
@@ -1277,9 +1280,9 @@ visData <- function(dat) {
 # npminVals <-  50
 # ras <- rasPrep$hole$hole.st.elev
 crossValidateSplines <- function(ras, tensionVals = seq(0.01,0.1,by=0.01),
-                          smoothVals = seq(10,30,by=5),
-                          npminVals = seq(60,140,by=20),
-                          tag='sys.time') {
+                                 smoothVals = seq(10,30,by=5),
+                                 npminVals = seq(60,140,by=20),
+                                 tag='sys.time') {
   
   if (tag == 'sys.time') {
     tag <- paste0('t_',format(Sys.time(),'%d_%m_%Y_%H_%M_%S')) }
@@ -1314,7 +1317,7 @@ crossValidateSplines <- function(ras, tensionVals = seq(0.01,0.1,by=0.01),
   # cvdevGrid[116,]
   #         er_mean     er_mean_abs run smoothVal tensionVal npminVal
   # 116 -1.7246e-05   0.0159536   204       0.4         10      300
-
+  
   pGrid <- expand.grid(smoothVal = smoothVals,
                        tensionVal = tensionVals,
                        npminVal = npminVals) %>% 
@@ -1347,17 +1350,17 @@ crossValidateSplines <- function(ras, tensionVals = seq(0.01,0.1,by=0.01),
   cvdevs <- do.call(rbind,lapply(list.files('cvdev',
                                             pattern=tag,
                                             full.names = T), function(x) {
-    runNum <- as.numeric(gsub(".*?([0-9]+).*", "\\1", x))
-    d <- read.csv(x, stringsAsFactors = F, header=F)
-    vals <- lapply(d$V1, str_split_fixed, '=', 2) %>% map(2)
-    d$vals <- as.numeric(unlist(vals))
-    # data.frame(var = c('mean','mean_abs'),
-    #            val = c(d[8,2],d[9,2]),
-    #            run = runNum)
-    data.frame(mae = d[9,2],
-               rmse = sqrt(d[24,2]),
-               run = runNum)
-  }))
+                                              runNum <- as.numeric(gsub(".*?([0-9]+).*", "\\1", x))
+                                              d <- read.csv(x, stringsAsFactors = F, header=F)
+                                              vals <- lapply(d$V1, str_split_fixed, '=', 2) %>% map(2)
+                                              d$vals <- as.numeric(unlist(vals))
+                                              # data.frame(var = c('mean','mean_abs'),
+                                              #            val = c(d[8,2],d[9,2]),
+                                              #            run = runNum)
+                                              data.frame(mae = d[9,2],
+                                                         rmse = sqrt(d[24,2]),
+                                                         run = runNum)
+                                            }))
   
   cvdevGrid <- left_join(cvdevs,pGrid)
   
@@ -1365,4 +1368,199 @@ crossValidateSplines <- function(ras, tensionVals = seq(0.01,0.1,by=0.01),
   return(cvdevGrid)
 }
 
+
+
+
+
+filePattern <- 'diffDat_feb28'
+filePattern <- 'march_offset_nonoise'
+dirLoc <- '/media/mal/working_files/quarry'
+analyseDat <- function(dirLoc, filePattern) { 
+  
+  loadRData <- function(fileName){
+    #loads an RData file, and returns it
+    load(fileName)
+    get(ls()[ls() != "fileName"])
+  }
+  
+  f <- list.files(dirLoc,full.names = T,
+                  pattern=paste(filePattern,'*'))
+  rasData <- lapply(f, function(x) { rmses <- loadRData(x) })
+  
+  # name correlations
+  nCor <- data.frame(long_name = c("Nearest Neighbor",
+                                   "Inverse Distance Weighted",
+                                   "Ordinary Kriging",
+                                   "GRASS Regularized Splines Tension"),
+                     short_name = c('nn','idw','ok','gspline'))
+  
+  rmsesAll <- rasData %>% 
+    map_df( ~.x$rmses)
+  
+  # summary plots
+  
+  # group vars
+  gVars = c('run_no','intpol_fid','int_method')
+  # err vars
+  errVars <- setdiff(names(rmsesAll),gVars)
+  
+  errPlots <- errVars %>% map(.f = function(v) {
+    rmsesAll2 <- rmsesAll
+    rmsesAll2$intpol_fid <- 
+      as.character(rmsesAll2$intpol_fid)
+    ggplot(rmsesAll2) + 
+      geom_boxplot(aes_string(x = 'intpol_fid',
+                              y = v)) + 
+      facet_wrap(~int_method) + 
+      theme(axis.text.x = element_text(angle = 45, hjust=1))
+  }) %>% setNames(errVars)
+  
+  # variable plots
+  allData <- rasData %>% 
+    map_df( ~.x$orig.maps$params.m) %>% 
+    left_join(nCor, by=c('int_method' = 'short_name')) %>% 
+    mutate(int_method = long_name) %>% 
+    dplyr::select(-long_name) %>% 
+    left_join(rmsesAll, by=c('run_no','intpol_fid','int_method'))
+  
+  # plots showing how cross validation parameters result in differing error
+  # values
+  varPlots <- errVars %>% map(.f = function(erv) {
+    varPlots <- unique(allData$int_method) %>% 
+      map(.f = function(i) {
+        ggplot(allData %>% dplyr::filter(int_method == i)) +
+          geom_smooth(aes(x = value,
+                          y = get(erv) )) + 
+          facet_wrap_paginate(intpol_fid ~ variable,
+                              scales = 'free',
+                              # ncol = 2, # n variables
+                              nrow = 4, # n sites
+                              page = 1) + 
+          ggtitle(i) + 
+          ylab(erv) + 
+          xlab('Parameter value')
+        
+      }) %>% setNames(unique(allData$int_method))
+  }) %>% setNames(errVars)
+  
+  # plots showing relaitionship between test error values 
+  # and earlier surface values
+  rmsesAll.m <- rmsesAll %>% 
+    reshape2::melt(id.vars = c(gVars, 'testErr.ex.r'))
+  surfPlots <- unique(allData$int_method) %>% 
+    map(.f = function(i) {
+      l <- list(compareDiff.ex.r = 
+                  ggplot(rmsesAll.m %>% 
+                           dplyr::filter(int_method == i) %>% 
+                           dplyr::filter(str_detect(variable,
+                                                    'compareDiff.ex.r|compareDiff.inc.r'))
+                         ) +
+                  geom_smooth(aes(x = testErr.ex.r,
+                                  y =  value)) + 
+                  facet_wrap_paginate(~ intpol_fid + variable,
+                                      scales = 'free',
+                                      # ncol = 2, # n variables
+                                      nrow = 4, # n sites
+                                      page = 1) + 
+                  ggtitle(i))
+      
+      
+    }) %>% setNames(unique(allData$int_method))
+  
+  
+  # find best runs per error value
+  bestRuns <- errVars %>% 
+    map_df(.f = function(x) {
+      a <- rmsesAll %>% 
+        group_by(intpol_fid,int_method) %>% 
+        slice_min(order_by=get(x)) %>% 
+        dplyr::select(-setdiff(errVars,x)) %>% 
+        dplyr::rename('error_value' = x) %>% 
+        mutate(error_value = as.numeric(error_value),
+               error_var = x)
+    }) %>%
+    dplyr::filter(error_var != 'trainingErr.r') %>% 
+    dplyr::filter(error_var != 'testErr.inc.r') %>% 
+    left_join(allData[,c(gVars,'variable','value')] %>% 
+                filter(variable == 'nmaxVals')) %>% 
+    group_by(intpol_fid,int_method, error_var) %>% 
+    slice_min(order_by = 'nmaxVals') %>% # where there are ties select run with 
+                                         # lowest nmax for reduced computation
+    mutate(bid = 1:nrow(.)) %>% 
+    dplyr::select(-c('variable', 'value'))
+  
+  # isoloate parameters for best runs
+  bestRuns.params <- bestRuns %>% left_join(allData) %>% 
+    dplyr::select(c(gVars,'bid','variable','value'))
+  
+  ggplot(bestRuns) + 
+    geom_col(aes(x = intpol_fid,
+                 y = error_value,
+                 fill = int_method),
+             position='dodge'
+    ) + 
+    facet_wrap(~ error_var) + 
+    theme(legend.position = 'bottom')
+  
+  
+  # extract best rasters
+  # convert raster data names to reflect real polygon fids
+  names(rasData) <- rasData %>% 
+    map(~unique(.x$rmses$intpol_fid)) %>% 
+    unlist(.)
+  
+  # extract rasters to flat list
+  bestRas <- 1:nrow(bestRuns) %>% 
+    map(.f = function(x) {
+      df <- bestRuns[x,]
+      rasData[[as.character(df$intpol_fid)]]$orig.maps$ras[[df$int_method]][[df$run_no]]
+    }) %>% setNames(as.character(1:nrow(bestRuns)))
+  # split list into logical groupings & # extract original interpolated rasters, 
+  # by map with lowest error per error measure
+  
+  bestRas.l <- split.data.frame(bestRuns, bestRuns$error_var) %>% 
+    map(~split(.x, .x$intpol_fid)) %>% map(~map(.x, .f = function(b) {
+      list(ras = bestRas[b$bid],
+           params = b %>% left_join(bestRuns.params))
+    }) 
+    # %>% setNames(b$int_method)
+    )
+  
+  # plot best ras
+  errRas <- bestRas.l$compareDiff
+  fidRas <- errRas$`2`
+  
+  bestRasPlots <- bestRas.l %>% map(.f= function(errRas) {
+    map(errRas, .f = function(fidRas) {
+      
+      allRasdf <- map2_df(fidRas$ras, .y = names(fidRas$ras), .f = function(r, rn) {
+        df <- as.data.frame(rasterToPoints(r)) %>% 
+          dplyr::rename(elev = 3) %>% 
+          mutate(bid = as.numeric(rn) ) %>% 
+          left_join(bestRuns, by='bid')
+      })
+      df.l <- fidRas$params %>% na.omit() %>% 
+        dplyr::group_by(int_method, run_no, bid) %>% 
+        dplyr::summarise(param_line = paste0(variable,': ',value,collapse='\n'))
+      
+      ggplot() +  
+        geom_raster(data=allRasdf, aes(x=x, y=y, fill=elev)) + 
+        geom_label(data=df.l, label.size=0.1, size=3,
+                  aes(x=min(allRasdf$x),
+                      y=min(allRasdf$y),
+                      label=param_line),
+                  nudge_x=(max(allRasdf$x) - min(allRasdf$x))*0.2,
+                  nudge_y=(max(allRasdf$y) - min(allRasdf$y))*0.2) +
+        scale_fill_viridis() +
+        coord_equal() +
+        theme(legend.position="none") + 
+        facet_wrap(~ int_method) + 
+        labs(title = paste0('Site: ',unique(allRasdf$intpol_fid)),
+             subtitle = paste0('Lowest error maps for ',unique(allRasdf$error_var))
+             )
+        
+    })
+  })
+  save(bestRasPlots,file='raster/bestras.RData')
+}
 
