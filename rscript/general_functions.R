@@ -25,10 +25,11 @@ library(patchwork)
 library(viridis)
 require(ggplot2)
 require(purrr)
+require(furrr)
 require(gridExtra)
 require(doParallel)
 require(future.apply)
-require(rayshader)
+
 
 userDataDir <<- '/home/barneyharris/user_quarry_data'
 gdb <- paste0(userDataDir,'/grassdb/quarry/PERMANENT/')
@@ -1167,8 +1168,7 @@ compareInt <- function(intRasters, # list of interpolated rasters
                        foldedRas, # the test/training rasters
                        compareRas, # another raster to compare int surfaces with
                        maskPoly=NULL # a polygon to exclude from testErr calculations
-) {
-  
+                       ) {
   
   # # convert all to raster format, if required
   # foldedRas.r <- lapply(foldedRas, function(x) {
@@ -1183,7 +1183,6 @@ compareInt <- function(intRasters, # list of interpolated rasters
   
   frtest <- as(foldedRas$test,'Raster')
   foldedRas$test <- frtest$layer.1
-  
   
   # training error is difference between original training data and modelled training data
   # test error is difference between original test data and modelled test data
@@ -1372,10 +1371,11 @@ crossValidateSplines <- function(ras, tensionVals = seq(0.01,0.1,by=0.01),
 
 
 
-filePattern <- 'diffDat_feb28'
-filePattern <- 'march_offset_nonoise'
-dirLoc <- '/media/mal/working_files/quarry'
-analyseDat <- function(dirLoc, filePattern) { 
+filePattern <- 'diffDat_feb28_nodiffs'
+filePattern <- 'diffDat_march_offset_nonoise_nodiffs'
+
+analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
+                       filePattern) { 
   
   loadRData <- function(fileName){
     #loads an RData file, and returns it
@@ -1383,9 +1383,20 @@ analyseDat <- function(dirLoc, filePattern) {
     get(ls()[ls() != "fileName"])
   }
   
-  f <- list.files(dirLoc,full.names = T,
+  fs <- list.files(dirLoc,full.names = T,
                   pattern=paste(filePattern,'*'))
-  rasData <- lapply(f, function(x) { rmses <- loadRData(x) })
+  print('loading raster files...')
+
+  # remove diffs from rdata 
+  # for (f in fs) {
+  #   load(f) # loads 'dat' file
+  #   dat$diff.maps <- NULL
+  #   gc()
+  #   save(dat, file=str_replace(f,filePattern,paste0(filePattern,'_nodiffs')))
+  #   rm(dat)
+  #   gc()
+  # }
+  rasData <- lapply(fs, loadRData)
   
   # name correlations
   nCor <- data.frame(long_name = c("Nearest Neighbor",
@@ -1447,7 +1458,7 @@ analyseDat <- function(dirLoc, filePattern) {
   # and earlier surface values
   rmsesAll.m <- rmsesAll %>% 
     reshape2::melt(id.vars = c(gVars, 'testErr.ex.r'))
-  surfPlots <- unique(allData$int_method) %>% 
+  crossPlots <- unique(allData$int_method) %>% 
     map(.f = function(i) {
       l <- list(compareDiff.ex.r = 
                   ggplot(rmsesAll.m %>% 
@@ -1493,7 +1504,7 @@ analyseDat <- function(dirLoc, filePattern) {
   bestRuns.params <- bestRuns %>% left_join(allData) %>% 
     dplyr::select(c(gVars,'bid','variable','value'))
   
-  ggplot(bestRuns) + 
+  errBars <- ggplot(bestRuns) + 
     geom_col(aes(x = intpol_fid,
                  y = error_value,
                  fill = int_method),
@@ -1527,9 +1538,8 @@ analyseDat <- function(dirLoc, filePattern) {
     )
   
   # plot best ras
-  errRas <- bestRas.l$compareDiff
-  fidRas <- errRas$`2`
-  
+  # errRas <- bestRas.l$compareDiff
+  # fidRas <- errRas$`2`
   bestRasPlots <- bestRas.l %>% map(.f= function(errRas) {
     map(errRas, .f = function(fidRas) {
       
@@ -1561,6 +1571,14 @@ analyseDat <- function(dirLoc, filePattern) {
         
     })
   })
-  save(bestRasPlots,file='raster/bestras.RData')
+  l <- list(bestRas.l = bestRas.l,
+            bestRuns = bestRuns,
+            bestRuns.params = bestRuns.params,
+            allData = allData,
+            plots = list(bestRasPlots = bestRasPlots,
+                         errPlots = errPlots,
+                         varPlots = varPlots,
+                         crossPlots = crossPlots))
+  return(l)
 }
 

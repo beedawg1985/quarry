@@ -39,7 +39,7 @@ prepData <- lapply(1:5,function(x) {
   # fold the data into test / training, using polygon and / or random noise
   foldA <- processTiles(tiles$a, # data with which to construction int models
                         cutpoly = tiles$pol, # polygon to exclude data from training
-                        sampleRasPer = 0 # percent of data to keep; noise removes remainder
+                        sampleRasPer = 0.5 # percent of data to keep; noise removes remainder
   )
   return(list(pol = pol,
               tiles = tiles,
@@ -78,7 +78,7 @@ runInterpolations <- local(function(pd,tag = 'testout',
                          # maskPoly = pd$pol, # if using non-offset poly
                          maskPoly = pd$tiles$pol, # if using offset poly
                          paramData=cv,
-                         testCV = F,
+                         testCV = T,
                          outputTag = tag)
   
   dat <- compareInt(intRasters=intA,
@@ -87,12 +87,15 @@ runInterpolations <- local(function(pd,tag = 'testout',
                 # maskPoly=pd$pol
                 maskPoly=pd$tiles$pol
                 )
-  
+  dat$diff.maps <- NULL
+  gc()
+  frem <- list.files('raster',pattern=paste0('gspline_int_intfid_',pd$tiles$pol$fid),
+                     full.names = T)
+  file.remove(frem)
   save(dat,
-       file=paste0(outputDir,'diffDat_',tag,'_polfid',pd$pol$fid,'.RDS'))
-  return(paste0(outputDir,'diffDat_',tag,'_polfid',pd$pol$fid,'.RDS'))
+       file=paste0(outputDir,'intdat_',tag,'_polfid',pd$pol$fid,'.RDS'))
+  return(paste0(outputDir,'intdat_',tag,'_polfid',pd$pol$fid,'.RDS'))
 })
-require(furrr)
 
 future::plan('multisession',workers=5)
 datOut <- furrr::future_map(prepData, 
