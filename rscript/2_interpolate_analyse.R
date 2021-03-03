@@ -1,32 +1,10 @@
-setwd('/home/barneyharris/projects/quarry')
+#!/usr/bin/env Rscript
+args = commandArgs(trailingOnly=TRUE)
+if (length(args)>0) setwd(args[1])
 source(paste0(getwd(),'/rscript/general_functions.R'))
 
-conPostgres()
-# import manually categorised data
-inc <- st_read('data/includes.gpkg') %>% 
-  # filter(interpolate == T) %>% 
-  mutate_if(is.factor,as.character)
-# buffer selected polygons
-inc.buff <- inc %>% st_buffer(250) %>% 
-  mutate(a_loc = paste(req,a,sep='_'))
-# write buffered polygons
-st_write(inc.buff,'data/inc_buff.shp',
-         delete_dsn=T)
 
-# manually trace / mark out features for interpolation 
-# layer name: 'interpolation'
-
-# import interpolation polygon
-conPostgres()
-int <- st_read(con,c('quarry','interpolate')) %>% 
-  left_join(inc %>% st_drop_geometry(), by=c('include_id'='pkey')) %>% 
-  mutate(a_locs = paste0(userDataDir,'/',layer,
-                         '/diffs/',req,'_',a,
-                         '.tif'),
-         b_locs = paste0(userDataDir,'/',layer,
-                         '/diffs/',req,'_',b,
-                         '.tif'))
-
+load('data/intpols.RDS')
 # cycle through polygons, cookie cutting and interpolating hole, 
 # finally producing difference map
 

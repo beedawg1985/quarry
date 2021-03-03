@@ -41,3 +41,6 @@ vignettes/*.pdf
 processed_lidar/
 private/
 large_data/
+
+# local config file 
+rscript/localconfig.R

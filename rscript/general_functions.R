@@ -1,4 +1,3 @@
-
 require(ggforce)
 require(reshape2)
 require(OGC)
@@ -30,11 +29,36 @@ require(gridExtra)
 require(doParallel)
 require(future.apply)
 
-
-userDataDir <<- '/home/barneyharris/user_quarry_data'
-gdb <- paste0(userDataDir,'/grassdb/quarry/PERMANENT/')
-setwd("/home/barneyharris/projects/quarry")
 par(mfrow=c(1,1), mar=c(1.1, 1.1, 1.1, 1.1)) 
+
+getInt <- function() {
+  
+  conPostgres()
+  # import manually categorised data
+  inc <- st_read('data/includes.gpkg') %>% 
+    # filter(interpolate == T) %>% 
+    mutate_if(is.factor,as.character)
+  # buffer selected polygons
+  inc.buff <- inc %>% st_buffer(250) %>% 
+    mutate(a_loc = paste(req,a,sep='_'))
+  # write buffered polygons
+  st_write(inc.buff,'data/inc_buff.shp',
+           delete_dsn=T)
+  
+  # manually trace / mark out features for interpolation 
+  # layer name: 'interpolation'
+  
+  # import interpolation polygon
+  conPostgres()
+  int <- st_read(con,c('quarry','interpolate')) %>% 
+    left_join(inc %>% st_drop_geometry(), by=c('include_id'='pkey')) %>% 
+    mutate(a_locs = paste0(userDataDir,'/',layer,
+                           '/diffs/',req,'_',a,
+                           '.tif'),
+           b_locs = paste0(userDataDir,'/',layer,
+                           '/diffs/',req,'_',b,
+                           '.tif'))
+}
 
 conPostgres <- function() {
   
