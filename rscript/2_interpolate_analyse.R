@@ -24,6 +24,7 @@ prepData <- lapply(1:5,function(x) {
               foldA = foldA))
 })
 
+# save(prepData, file='data/prepdata_noise_offset_march.RDS')
 cvGrids <- 
   list(
     nn = data.frame(expand.grid(
