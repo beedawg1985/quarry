@@ -29,6 +29,7 @@ require(gridExtra)
 require(doParallel)
 require(future.apply)
 
+source('rscript/localconfig.R')
 par(mfrow=c(1,1), mar=c(1.1, 1.1, 1.1, 1.1)) 
 
 getInt <- function() {
@@ -803,6 +804,7 @@ st_slopeaspect <- function(st_ras, formatOut='Stars') {
   return(output)
 }
 # pol <- int[1,]
+# offsetPol <- T
 loadLidar <- function(pol, 
                       bufferDem=50, # how much DEM around hole to include?
                       offsetPol=F) {
@@ -829,12 +831,15 @@ loadLidar <- function(pol,
       t$fun <- mean
       r <- do.call(mosaic, t)
       rStars <- st_as_stars(r)
-    } else rStars <- read_stars(tiles$location)
-    st_crs(rStars) <- st_crs(pol)
+    } else r <- raster(tiles$location)
+    
     polBuff <- pol %>% st_buffer(b)
-    clippedRas <- rStars[polBuff]
-    write_stars(clippedRas, paste0('raster/',refCol,'.tif'))
-    # plot(clippedRas)
+    polBuff.r <- fasterize::fasterize(polBuff, raster(r))
+    clippedRas.r <- trim(mask(r, polBuff.r))
+    writeRaster(clippedRas.r,paste0('raster/',refCol,'.tif'),
+                overwrite=T)
+    clippedRas <- read_stars(paste0('raster/',refCol,'.tif'))
+    
     return(clippedRas)
   }
   
@@ -968,15 +973,19 @@ processTiles <- function(ras,
 # trainingRas <- foldA$train
 # testRas <- foldA$all
 # cv <- T
+# pd <- prepData[[1]]
 # paramData <- cvGrids
 # pd <- prepData[[1]]
-# trainingRas <- pd$foldA$train
-# testRas <- pd$foldA$all
+# trainingData <- pd$foldA$train
+# testData <- pd$foldA$all
 # maskPoly = pd$pol
+# testCV <- T
+# gdb='/home/barneyharris/user_quarry_data/grassdb/quarry/q1/'
 interpolateRas <- function(trainingData, testData, maskPoly, paramData,
                            testCV = T,
                            outputDir = '/media/mal/working_files/quarry/',
-                           outputTag='testnew') {
+                           outputTag='testnew',
+                           gdb='/home/barneyharris/user_quarry_data/grassdb/quarry/q1/') {
   
   # interpolation models ----
   
@@ -1043,10 +1052,10 @@ interpolateRas <- function(trainingData, testData, maskPoly, paramData,
   interp_TIN <- raster::rasterFromXYZ(fit_TIN, crs = crs(trainingData$sf))
   
   # parameterised interpolation models ----
-  
   # process CV grids to remove bad combinations (nmin vals > nmax vals)
   # and add run number, add polygon id
   # df <- paramData$nn
+  # paramData <- cvGrids
   paramData.c <- 
     paramData %>% 
     map2(.y = names(paramData), 
@@ -1117,29 +1126,37 @@ interpolateRas <- function(trainingData, testData, maskPoly, paramData,
   # training.sf <- trainingData$sf
   # test.r <- testData$ras
   
-  # write raster as gdal for GRASS
-  writeRaster(testData$ras[[1]],
-              paste0('raster/intout_',maskPoly$fid,'_ras_clip.tif'),
-              overwrite=T)
-  
+  # write points for gspline
   st_write(trainingData$sf[,'elev'], 
            paste0('vector/intout_',maskPoly$fid,'_training.gpkg'),
            delete_dsn=T)
+  vecLoc <- paste0(getwd(),'/vector/intout_',maskPoly$fid,'_training.gpkg')
+  system(paste0(
+    'grass ',gdb,' --exec v.in.ogr input=',vecLoc,' output=points --o'
+  ))
   
+  m <- mask(testData$ras[[1]],trainingData$ras[[1]],inverse=T)
+  mLoc <- paste0(getwd(),'/raster/intout_',maskPoly$fid,'_ras_testmask.tif')
+  writeRaster(m, mLoc,
+              overwrite=T)
+  system(paste0(
+    'grass ',gdb,' --exec r.in.gdal input=',mLoc,' output=testMask --o'
+          ))
+  system(paste0(
+    'grass ',gdb,' --exec g.region raster=testMask'
+  ))
   # x <- 1
+  
   interp_GSPLINEs <- lapply(paramData.c$gspline$run_no, function(x) {
     pdata <- paramData.c$gspline %>% 
       filter(run_no == x)
     system2('grass',
-            paste(shQuote('--tmp-location'),
-                  shQuote('EPSG:27700'),
+            paste(shQuote(gdb),
                   shQuote('--exec'),
                   shQuote('/home/barneyharris/projects/quarry/python/GRASS_vrst.py'),
-                  shQuote(paste0(getwd(),'/vector/intout_',maskPoly$fid,'_training.gpkg')),
                   shQuote(pdata$smoothVals),
                   shQuote(pdata$tensionVals),
                   shQuote(pdata$nminVals),
-                  shQuote(paste0(getwd(),'/raster/intout_',maskPoly$fid,'_ras_clip.tif')),
                   shQuote(x),
                   shQuote(pdata$intpol_fid)
             ),
@@ -1148,9 +1165,10 @@ interpolateRas <- function(trainingData, testData, maskPoly, paramData,
     )
     r <- raster(paste0('raster/gspline_int_intfid_',pdata$intpol_fid,
                        '_runnum_',x,'.tif'))
-    # file.remove(paste0('raster/gspline_int_intfid_',pdata$intpol_fid,
-    #                    '_runnum_',x,'.tif'))
-    return(r)
+    r.merge <- raster::merge(r,trainingData$ras$layer.1)
+    file.remove(paste0('raster/gspline_int_intfid_',pdata$intpol_fid,
+                       '_runnum_',x,'.tif'))
+    return(r.merge)
   })
   
   # output parameters as melted df
@@ -1166,11 +1184,13 @@ interpolateRas <- function(trainingData, testData, maskPoly, paramData,
     ,"Triangular Irregular Surface" = list(interp_TIN)
     ,"Random Forest SP" = list(interp_RF$rfSp)
     ,"GRASS Regularized Splines Tension" = interp_GSPLINEs
+    # ,"GRASS Bicubic Spline" = interp_GBICUBICs
   ) %>% 
     map( ~map(.x, .f = function(r) {
       mask(crop(extend(r,testData$ras[[1]]),testData$ras[[1]]),
            testData$ras[[1]])
     }))
+  
   
   print(paste0('completed pol id...',maskPoly$fid))
   out <- list(ras = rasterlist,
@@ -1192,7 +1212,7 @@ compareInt <- function(intRasters, # list of interpolated rasters
                        foldedRas, # the test/training rasters
                        compareRas, # another raster to compare int surfaces with
                        maskPoly=NULL # a polygon to exclude from testErr calculations
-                       ) {
+) {
   
   # # convert all to raster format, if required
   # foldedRas.r <- lapply(foldedRas, function(x) {
@@ -1272,7 +1292,8 @@ compareInt <- function(intRasters, # list of interpolated rasters
     mutate(intpol_fid = maskPoly$fid)
   
   return(list(orig.maps = intRasters,
-              diff.maps = diffMaps,
+              # diff.maps = diffMaps,
+              orig.data = foldedRas$all,
               rmses = diffRMSEs))
 }
 
@@ -1395,9 +1416,12 @@ crossValidateSplines <- function(ras, tensionVals = seq(0.01,0.1,by=0.01),
 
 
 
-filePattern <- 'diffDat_feb28_nodiffs'
-filePattern <- 'diffDat_march_offset_nonoise_nodiffs'
-
+# filePattern <- 'diffDat_feb28_nodiffs'
+# filePattern <- 'diffDat_march_offset_nonoise_nodiffs'
+# filePattern <- 'intdat_march_offset_wnoise'
+# filePattern <- 'intdat_march5_offset_w50noise_all'
+filePattern = 'intdat_march6_nooffset_w50noise_all'
+# filePattern = 'intdat_march6_offset_nonoise_all'
 analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
                        filePattern) { 
   
@@ -1408,9 +1432,9 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
   }
   
   fs <- list.files(dirLoc,full.names = T,
-                  pattern=paste(filePattern,'*'))
+                   pattern=paste(filePattern,'*'))
   print('loading raster files...')
-
+  
   # remove diffs from rdata 
   # for (f in fs) {
   #   load(f) # loads 'dat' file
@@ -1421,13 +1445,15 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
   #   gc()
   # }
   rasData <- lapply(fs, loadRData)
-  
+
   # name correlations
   nCor <- data.frame(long_name = c("Nearest Neighbor",
                                    "Inverse Distance Weighted",
                                    "Ordinary Kriging",
-                                   "GRASS Regularized Splines Tension"),
-                     short_name = c('nn','idw','ok','gspline'))
+                                   "GRASS Regularized Splines Tension",
+                                   "GRASS Bicubic Spline"),
+                     short_name = c('nn','idw','ok','gspline',
+                                    'gbicubic'))
   
   rmsesAll <- rasData %>% 
     map_df( ~.x$rmses)
@@ -1439,6 +1465,7 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
   # err vars
   errVars <- setdiff(names(rmsesAll),gVars)
   
+  # error plots ----
   errPlots <- errVars %>% map(.f = function(v) {
     rmsesAll2 <- rmsesAll
     rmsesAll2$intpol_fid <- 
@@ -1450,7 +1477,7 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
       theme(axis.text.x = element_text(angle = 45, hjust=1))
   }) %>% setNames(errVars)
   
-  # variable plots
+  # variable plots ----
   allData <- rasData %>% 
     map_df( ~.x$orig.maps$params.m) %>% 
     left_join(nCor, by=c('int_method' = 'short_name')) %>% 
@@ -1480,30 +1507,33 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
   
   # plots showing relaitionship between test error values 
   # and earlier surface values
+  # cross plots ----
   rmsesAll.m <- rmsesAll %>% 
     reshape2::melt(id.vars = c(gVars, 'testErr.ex.r'))
+  
+  # i <- unique(allData$int_method)[1]
   crossPlots <- unique(allData$int_method) %>% 
     map(.f = function(i) {
-      l <- list(compareDiff.ex.r = 
-                  ggplot(rmsesAll.m %>% 
-                           dplyr::filter(int_method == i) %>% 
-                           dplyr::filter(str_detect(variable,
-                                                    'compareDiff.ex.r|compareDiff.inc.r'))
-                         ) +
-                  geom_smooth(aes(x = testErr.ex.r,
-                                  y =  value)) + 
-                  facet_wrap_paginate(~ intpol_fid + variable,
-                                      scales = 'free',
-                                      # ncol = 2, # n variables
-                                      nrow = 4, # n sites
-                                      page = 1) + 
-                  ggtitle(i))
+      df <- rmsesAll.m %>% 
+        dplyr::filter(int_method == i) %>% 
+        mutate_if(is.factor,as.character)
       
-      
+      p <- 1:length(unique(df$variable)) %>% 
+        map(.f = function(vn) {
+          ggplot(df %>% filter(variable == unique(df$variable)[vn])) +
+            geom_smooth(aes(x = testErr.ex.r,
+                            y =  value)) + 
+            facet_wrap(~ intpol_fid,
+                       scales = 'free',
+                       # ncol = 2, # n variables
+                       nrow = 3, # n sites
+            ) + 
+            ggtitle(paste(i,unique(df$variable)[vn],collapse=': '))
+        }) %>% setNames(unique(df$variable))
     }) %>% setNames(unique(allData$int_method))
   
-  
   # find best runs per error value
+  # best runs ----
   bestRuns <- errVars %>% 
     map_df(.f = function(x) {
       a <- rmsesAll %>% 
@@ -1515,12 +1545,11 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
                error_var = x)
     }) %>%
     dplyr::filter(error_var != 'trainingErr.r') %>% 
-    dplyr::filter(error_var != 'testErr.inc.r') %>% 
     left_join(allData[,c(gVars,'variable','value')] %>% 
                 filter(variable == 'nmaxVals')) %>% 
     group_by(intpol_fid,int_method, error_var) %>% 
     slice_min(order_by = 'nmaxVals') %>% # where there are ties select run with 
-                                         # lowest nmax for reduced computation
+    # lowest nmax for reduced computation
     mutate(bid = 1:nrow(.)) %>% 
     dplyr::select(-c('variable', 'value'))
   
@@ -1528,6 +1557,7 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
   bestRuns.params <- bestRuns %>% left_join(allData) %>% 
     dplyr::select(c(gVars,'bid','variable','value'))
   
+  # error bar plots -----
   errBars <- ggplot(bestRuns) + 
     geom_col(aes(x = intpol_fid,
                  y = error_value,
@@ -1536,20 +1566,31 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
     ) + 
     facet_wrap(~ error_var) + 
     theme(legend.position = 'bottom')
-  
-  
+
   # extract best rasters
   # convert raster data names to reflect real polygon fids
+  # best rasters ----
   names(rasData) <- rasData %>% 
     map(~unique(.x$rmses$intpol_fid)) %>% 
     unlist(.)
   
+  # rename prep data ready for diff maps
+  fids <- prepData %>% map(~.x$pol$fid) %>% unlist()
+  names(prepData) <- as.character(fids)
+  
   # extract rasters to flat list
+  x <- 1
+  plot(rasData$`2`$orig.data$ras$layer.1)
   bestRas <- 1:nrow(bestRuns) %>% 
     map(.f = function(x) {
       df <- bestRuns[x,]
-      rasData[[as.character(df$intpol_fid)]]$orig.maps$ras[[df$int_method]][[df$run_no]]
+      intras <- rasData[[as.character(df$intpol_fid)]]$orig.maps$ras[[df$int_method]][[df$run_no]]
+      diffras <- rasData[[as.character(df$intpol_fid)]]$orig.data$ras$layer.1 - intras
+      list(intras = intras,
+           diffras = diffras)
     }) %>% setNames(as.character(1:nrow(bestRuns)))
+  
+  
   # split list into logical groupings & # extract original interpolated rasters, 
   # by map with lowest error per error measure
   
@@ -1562,39 +1603,92 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
     )
   
   # plot best ras
-  # errRas <- bestRas.l$compareDiff
-  # fidRas <- errRas$`2`
+  # errRas <- bestRas.l[[1]]
+  # fidRas <- errRas$`3`
   bestRasPlots <- bestRas.l %>% map(.f= function(errRas) {
     map(errRas, .f = function(fidRas) {
       
       allRasdf <- map2_df(fidRas$ras, .y = names(fidRas$ras), .f = function(r, rn) {
-        df <- as.data.frame(rasterToPoints(r)) %>% 
+        df <- as.data.frame(rasterToPoints(r$intras)) %>% 
           dplyr::rename(elev = 3) %>% 
-          mutate(bid = as.numeric(rn) ) %>% 
+          mutate(bid = as.numeric(rn),
+                 type = 'int') %>% 
           left_join(bestRuns, by='bid')
+        
+        df2 <- as.data.frame(rasterToPoints(r$diffras)) %>% 
+          dplyr::rename(elev = 3) %>% 
+          mutate(bid = as.numeric(rn),
+                 type = 'diff') %>% 
+          left_join(bestRuns, by='bid')
+        rbind(df,df2)
       })
-      df.l <- fidRas$params %>% na.omit() %>% 
-        dplyr::group_by(int_method, run_no, bid) %>% 
-        dplyr::summarise(param_line = paste0(variable,': ',value,collapse='\n'))
+      # parse parameters and RMSEs
+      tmp <- fidRas$params %>%
+        dplyr::group_by(int_method, run_no, bid, error_value) %>% 
+        dplyr::filter(n() > 1) %>% 
+        dplyr::summarise(param_line = paste0(variable,': ',value,collapse='\n')) %>% 
+        mutate(param_all = paste0(param_line, '\nRMSE: ',round(error_value,4))) %>% 
+        dplyr::select(-param_line)
       
-      ggplot() +  
-        geom_raster(data=allRasdf, aes(x=x, y=y, fill=elev)) + 
-        geom_label(data=df.l, label.size=0.1, size=3,
-                  aes(x=min(allRasdf$x),
-                      y=min(allRasdf$y),
-                      label=param_line),
-                  nudge_x=(max(allRasdf$x) - min(allRasdf$x))*0.2,
-                  nudge_y=(max(allRasdf$y) - min(allRasdf$y))*0.2) +
+      df.l <- fidRas$params %>%
+        dplyr::group_by(int_method, run_no, bid, error_value) %>% 
+        dplyr::filter(n() == 1) %>% 
+        mutate(param_all = paste0('RMSE: ',round(error_value,4))) %>% 
+        dplyr::select(all_of(names(tmp))) %>% 
+        bind_rows(tmp)
+      
+      elevPlots <- ggplot() +  
+        geom_raster(data=allRasdf %>% filter(type == 'int'), 
+                    aes(x=x, y=y, fill=elev)) + 
+        geom_label(data=df.l, label.size=0.1, size=2.75,
+                   aes(x=min(allRasdf$x),
+                       y=min(allRasdf$y),
+                       label=param_all),
+                   nudge_x=(max(allRasdf$x) - min(allRasdf$x))*0.2,
+                   nudge_y=(max(allRasdf$y) - min(allRasdf$y))*0.2) +
         scale_fill_viridis() +
         coord_equal() +
         theme(legend.position="none") + 
         facet_wrap(~ int_method) + 
-        labs(title = paste0('Site: ',unique(allRasdf$intpol_fid)),
+        labs(title = paste0('Interpolated surfaces for site: ',unique(allRasdf$intpol_fid)),
              subtitle = paste0('Lowest error maps for ',unique(allRasdf$error_var))
-             )
-        
+        )
+      
+      diffPlots <- ggplot() +  
+        geom_raster(data=allRasdf %>% filter(type == 'diff'), aes(x=x, y=y, fill=elev)) + 
+        geom_label(data=df.l, label.size=0.1, size=2.75,
+                   aes(x=min(allRasdf$x),
+                       y=min(allRasdf$y),
+                       label=param_all),
+                   nudge_x=(max(allRasdf$x) - min(allRasdf$x))*0.2,
+                   nudge_y=(max(allRasdf$y) - min(allRasdf$y))*0.2) +
+        scale_fill_viridis() +
+        coord_equal() +
+        theme(legend.position="bottom",
+              legend.key.width = unit(10,'mm')) + 
+        facet_wrap(~ int_method) + 
+        labs(title = paste0('Difference maps for site: ',unique(allRasdf$intpol_fid)),
+             subtitle = paste0('Lowest error maps for ',unique(allRasdf$error_var)),
+             fill = 'Difference (m)'
+        )
+      
+      # check width of raster to make sure plot is wide enough for labels
+      minWidth <- 150
+      rasWidth <- (max(allRasdf$x) - min(allRasdf$x))
+      if (rasWidth < minWidth) {
+        elevPlots <- elevPlots + lims(x = c( min(allRasdf$x)-((minWidth-rasWidth)/2),
+                                             max(allRasdf$x)+((minWidth-rasWidth)/2))
+        )
+        diffPlots <- diffPlots + lims(x = c( min(allRasdf$x)-((minWidth-rasWidth)/2),
+                                             max(allRasdf$x)+((minWidth-rasWidth)/2))
+        )
+      }
+      
+      list(elev = elevPlots,
+           diff = diffPlots)
     })
   })
+  
   l <- list(bestRas.l = bestRas.l,
             bestRuns = bestRuns,
             bestRuns.params = bestRuns.params,
@@ -1606,3 +1700,122 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
   return(l)
 }
 
+
+# grass bicubic ----
+# tag <- sessionTag
+interpolateRasBicubic <- function(pd,cvg,
+                                  outputDir = '/media/mal/working_files/quarry/',
+                                  testCV=T,
+                                  tag) {
+  tag <- str_replace(tag,tag,paste0(tag, '_bicubic'))
+  trainingData <- pd$foldA$train
+  testData <- pd$foldA$all
+  maskPoly <-  pd$tiles$pol # if using offset poly
+  paramData <- cvg
+  
+  paramData.c <- 
+    paramData %>% 
+    map2(.y = names(paramData), 
+         .f = function(df, y) {
+           if (any(str_detect(names(df),'nmaxVals')) && 
+               any(str_detect(names(df),'nminVals'))) {
+             df <- df %>% filter(nminVals < nmaxVals) }
+           df <- df %>% 
+             mutate(run_no = 1:nrow(.),
+                    intpol_fid = maskPoly$fid,
+                    int_method = y)
+           if (testCV) df <- df[1:5,]
+           return(df)
+         })
+  
+  
+  trainLoc <- paste0(getwd(),'/raster/intout_',maskPoly$fid,'_ras_trainmask.tif')
+  writeRaster(trainingData$ras[[1]], trainLoc,
+              overwrite=T)
+  
+  interp_GBICUBICs <- lapply(paramData.c$gbicubic$run_no, function(x) {
+    pdata <- paramData.c$gbicubic %>% 
+      filter(run_no == x)
+    system2('grass',
+            paste(
+              # shQuote(gdb),
+              shQuote('--tmp-location'),
+              shQuote('EPSG:27700'),
+              shQuote('--exec'),
+              shQuote('/home/barneyharris/projects/quarry/python/GRASS_bspline.py'),
+              shQuote(trainLoc),
+              shQuote(pdata$stepVals),
+              shQuote(pdata$lamVals),
+              shQuote(x),
+              shQuote(pdata$intpol_fid)
+            ),
+            stderr = paste0(getwd(),'/logs/grass_bspline_errout_',
+                            pdata$intpol_fid,'.txt')
+    )
+    r <- raster(paste0('raster/gbicubic_int_intfid_',pdata$intpol_fid,
+                       '_runnum_',x,'.tif'))
+    r.merge <- raster::merge(r,trainingData$ras$layer.1)
+    file.remove(paste0('raster/gbicubic_int_intfid_',pdata$intpol_fid,
+                       '_runnum_',x,'.tif'))
+    return(r.merge)
+  })
+  
+  # gen list
+  rasterlist <- list(
+    "GRASS Bicubic Spline" = interp_GBICUBICs
+  ) %>% 
+    map( ~map(.x, .f = function(r) {
+      mask(crop(extend(r,testData$ras[[1]]),testData$ras[[1]]),
+           testData$ras[[1]])
+    }))
+  
+  intA <- list(ras = rasterlist)
+  
+  dat <- compareInt(intRasters=intA,
+                    foldedRas=pd$foldA,
+                    compareRas=pd$tiles$b,
+                    # maskPoly=pd$pol
+                    maskPoly=pd$tiles$pol)
+  dat$diff.maps <- NULL
+  gc()
+  frem <- list.files('raster',pattern=paste0('gbicubic_int_intfid_',pd$tiles$pol$fid),
+                     full.names = T)
+  file.remove(frem)
+  save(dat,
+       file=paste0(outputDir,'intdat_',tag,'_polfid',pd$pol$fid,'.RDS'))
+  return(rasterlist)
+}
+
+# tag <- 'intdat_march5_offset_w50noise'
+outputDir <- "/media/mal/working_files/quarry"
+bindCubic <- function(tag, outputDir="/media/mal/working_files/quarry") {
+  f <- list.files(outputDir,pattern=tag,
+                  full.names = T)
+  f <- f[!str_detect(f,'_all_')]
+  
+  f.bi <- f[str_detect(f,'bicubic')]
+  f <- f[!str_detect(f,'bicubic')]
+  print('binding bicubic to all other interpolations....')
+  if (length(f) > 0 && length(f.bi) > 0 && 
+      length(f) == length(f.bi) ) {
+    # x <- 1
+    1:length(f) %>% 
+      map(.f = function(x) {
+        print(f.bi[x])
+        load(f.bi[x])
+        datBicubic <- dat
+        load(f[x])
+        dat$orig.maps$ras$`GRASS Bicubic Spline` <- 
+        datBicubic$orig.maps$ras$`GRASS Bicubic Spline`
+        dat$rmses <- rbind(datBicubic$rmses,
+                       dat$rmses)
+        f.out <- str_replace(f[x],tag,paste0(tag,'_all'))
+        save(dat, file=f.out)
+        file.remove(c(f[x],f.bi[x]))
+        return()
+      })
+  }
+  m <- str_replace(tag,tag,paste0(tag,'_all'))
+  return(m)
+}
+ 

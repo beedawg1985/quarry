@@ -14,23 +14,15 @@ def my_print(text):
     sys.stdout.write('\n' + str(text))
     sys.stdout.flush()
 
-def runInt(pointsLoc,smoothVal,tensionVal,npminVal,maskLoc,runNo,polfid):
-  my_print('importing points...')
-  grass.run_command("v.in.ogr", overwrite=True, input=pointsLoc, \
-                    output='points',\
-                    flags='o')
-  my_print('importing masking raster...')
-  grass.run_command("r.in.gdal", overwrite=True, input=maskLoc, \
-                    output='opMask', flags='o')
-  grass.run_command("g.region", raster='opMask')
+def runInt(smoothVal,tensionVal,npminVal,runNo,polfid):
   my_print('running v.surf.rst...')
   grass.run_command("v.surf.rst", input='points',\
-                    segmax='40',\
+                    segmax='10',\
                     zcolumn='elev',\
-                    mask='opMask',\
                     tension=smoothVal,\
                     smooth=tensionVal,\
                     npmin=npminVal,\
+                    mask='testMask',\
                     elevation='int',\
                     overwrite=True)
   grass.run_command("r.out.gdal",\
@@ -41,12 +33,10 @@ def runInt(pointsLoc,smoothVal,tensionVal,npminVal,maskLoc,runNo,polfid):
   return
    
 # parse arguments
-pointsLoc = sys.argv[1]
-smoothVal = sys.argv[2]
-tensionVal = sys.argv[3]
-npminVal = sys.argv[4]
-maskLoc = sys.argv[5]
-runNo = sys.argv[6]
-polfid = sys.argv[7]
+smoothVal = sys.argv[1]
+tensionVal = sys.argv[2]
+npminVal = sys.argv[3]
+runNo = sys.argv[4]
+polfid = sys.argv[5]
 
-runInt(pointsLoc,smoothVal,tensionVal,npminVal,maskLoc,runNo,polfid)
+runInt(smoothVal,tensionVal,npminVal,runNo,polfid)

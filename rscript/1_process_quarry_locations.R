@@ -175,10 +175,12 @@ dtmDirs <- setdiff(unique(int$layer),
                                       recursive = F)))
 # x <- 'SJNE'
 # x <- 'SYNE'
+x <- 'NYNW'
+# dtmDirs <- unique(int$layer)
 lapply(dtmDirs, function(x) {
   dir.create(file.path(userDataDir,'dtms',x))
   sfFilt <- int[int$layer == x,]
-  
+  plot(sfFilt$geom)
   yrs <- int[int$layer == x,c('a','b')] %>% 
     st_drop_geometry() %>% 
     unlist() %>% as.character() %>% 
@@ -193,6 +195,7 @@ lapply(dtmDirs, function(x) {
   # cycle through each year folder and remove any tiles not intersecting with
   # polygons
   # yearFolder <- "/home/barneyharris/user_quarry_data/dtms/SONE/2011"
+  
   lapply(paste0(userDataDir,'/dtms/',x,'/',yrs), function(yearFolder) {
     gdaltindex(index_file = paste0(yearFolder,'/tindex.shp'),
                gdal_file = list.files(yearFolder,pattern='*.tif$',
@@ -205,14 +208,14 @@ lapply(dtmDirs, function(x) {
     # only those which intersect with with quarries request polygon
     
     # clean up, by removing non-intersecting tiles and .zip archive
-    toRm <- setdiff(unique(list.files(yearFolder,pattern='*.tif$',full.names = T)),
-                    unique(tIndex$location))
-    # x <- toRm[1]
-    if (length(toRm) > 0) {
-      lapply(toRm, function(x) {
-        file.remove(list.files(yearFolder, pattern=str_replace(basename(x),'.tif','*'),
-                               full.names = T)) })
-    }
+    # toRm <- setdiff(unique(list.files(yearFolder,pattern='*.tif$',full.names = T)),
+    #                 unique(tIndex$location))
+    # # x <- toRm[1]
+    # if (length(toRm) > 0) {
+    #   lapply(toRm, function(x) {
+    #     file.remove(list.files(yearFolder, pattern=str_replace(basename(x),'.tif','*'),
+    #                            full.names = T)) })
+    # }
   })
   
   file.remove(list.files(paste0(userDataDir,'/dtms/',x),pattern='*.zip$',
