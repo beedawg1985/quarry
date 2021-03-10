@@ -82,11 +82,8 @@ runInterpolations <- local(function(pd,tag = 'testout',
   print('analysing...')
   dat <- compareInt(intRasters=intA,
                     foldedRas=pd$foldA,
-                    compareRas=pd$tiles$b,
-                    # maskPoly=pd$pol
-                    maskPoly=pd$tiles$pol
-  )
-
+                    tiledRas=pd$tiles)
+  
   # dat$diff.maps <- NULL
   gc()
   frem <- list.files('raster',pattern=paste0('gspline_int_intfid_',pd$tiles$pol$fid),
@@ -192,3 +189,8 @@ bindCubic(sessionTag)
 print(Sys.time() - st)
 
 
+# prepData <- map(1:5,          # int polygon row numbers
+#                 .f=prepareData,
+#                 offset=T,    # offset the polygon?
+#                 smpper=0.5  # percentage noise
+# )

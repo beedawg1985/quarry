@@ -1141,7 +1141,7 @@ interpolateRas <- function(trainingData, testData, maskPoly, paramData,
               overwrite=T)
   system(paste0(
     'grass ',gdb,' --exec r.in.gdal input=',mLoc,' output=testMask --o'
-          ))
+  ))
   system(paste0(
     'grass ',gdb,' --exec g.region raster=testMask'
   ))
@@ -1209,16 +1209,14 @@ interpolateRas <- function(trainingData, testData, maskPoly, paramData,
 # maskPoly <- pol
 
 compareInt <- function(intRasters, # list of interpolated rasters
-                       foldedRas, # the test/training rasters
-                       compareRas, # another raster to compare int surfaces with
-                       maskPoly=NULL # a polygon to exclude from testErr calculations
-) {
+                       foldedRas, # the test/training rasters (raster A, latest)
+                       tiledRas # another raster to compare int surfaces with (raster B, earliest)
+) { 
   
-  # # convert all to raster format, if required
-  # foldedRas.r <- lapply(foldedRas, function(x) {
-  #   x.r <- as(x, 'Raster')
-  #   x.out <- x.r[[1]]
-  # }) 
+  # the earlier survey to compare against
+  compareRas <- tiledRas$b
+  # a polygon to exclude from testErr calculations
+  maskPoly <- tiledRas$pol
   
   if (class(compareRas)=='stars') {
     compareRas.r <- as(compareRas, 'Raster')
@@ -1293,7 +1291,7 @@ compareInt <- function(intRasters, # list of interpolated rasters
   
   return(list(orig.maps = intRasters,
               # diff.maps = diffMaps,
-              orig.data = foldedRas$all,
+              tiles = tiledRas,
               rmses = diffRMSEs))
 }
 
@@ -1419,8 +1417,8 @@ crossValidateSplines <- function(ras, tensionVals = seq(0.01,0.1,by=0.01),
 # filePattern <- 'diffDat_feb28_nodiffs'
 # filePattern <- 'diffDat_march_offset_nonoise_nodiffs'
 # filePattern <- 'intdat_march_offset_wnoise'
-# filePattern <- 'intdat_march5_offset_w50noise_all'
 filePattern = 'intdat_march6_nooffset_w50noise_all'
+# filePattern <- 'intdat_march5_offset_w50noise_all'
 # filePattern = 'intdat_march6_offset_nonoise_all'
 analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
                        filePattern) { 
@@ -1434,17 +1432,19 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
   fs <- list.files(dirLoc,full.names = T,
                    pattern=paste(filePattern,'*'))
   print('loading raster files...')
+  print(fs)
   
-  # remove diffs from rdata 
-  # for (f in fs) {
-  #   load(f) # loads 'dat' file
-  #   dat$diff.maps <- NULL
-  #   gc()
-  #   save(dat, file=str_replace(f,filePattern,paste0(filePattern,'_nodiffs')))
-  #   rm(dat)
-  #   gc()
-  # }
   rasData <- lapply(fs, loadRData)
+  
+  # manually add tiles
+  # x <- 1
+  # for (x in 1:length(rasData)) {
+  #   print(x)
+  #   rasData[[x]]$orig.data <- NULL
+  #   rasData[[x]]$tiles <- prepData[[x]]$tiles
+  #   o <- rasData[[x]]
+  #   save(o, file=fs[[x]])
+  # }
 
   # name correlations
   nCor <- data.frame(long_name = c("Nearest Neighbor",
@@ -1477,6 +1477,14 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
       theme(axis.text.x = element_text(angle = 45, hjust=1))
   }) %>% setNames(errVars)
   
+  print('exporting pdf...')
+  multi.page <- ggpubr::ggarrange(plotlist = errPlots, 
+                                  nrow = 1, ncol = 1) 
+  ggpubr::ggexport(multi.page, 
+                   filename =
+                     paste0('plots/',filePattern,'_errorPlots.pdf'),
+                   height = 8.25, width = 11.75)
+  
   # variable plots ----
   allData <- rasData %>% 
     map_df( ~.x$orig.maps$params.m) %>% 
@@ -1487,50 +1495,83 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
   
   # plots showing how cross validation parameters result in differing error
   # values
+  # erv <- errVars[2]
+  # i <- 'GRASS Bicubic Spline'
   varPlots <- errVars %>% map(.f = function(erv) {
     varPlots <- unique(allData$int_method) %>% 
       map(.f = function(i) {
-        ggplot(allData %>% dplyr::filter(int_method == i)) +
-          geom_smooth(aes(x = value,
-                          y = get(erv) )) + 
+        df <- allData %>% dplyr::filter(int_method == i)
+        g <- ggplot(df) +
+          stat_smooth(aes(x = value,
+                          y = get(erv)),
+                      method = 'loess') +
           facet_wrap_paginate(intpol_fid ~ variable,
                               scales = 'free',
-                              # ncol = 2, # n variables
-                              nrow = 4, # n sites
+                              ncol = length(unique(df$variable)), # n variables
+                              # nrow = 4, # n sites
                               page = 1) + 
           ggtitle(i) + 
           ylab(erv) + 
-          xlab('Parameter value')
-        
+          xlab('Parameter value') + 
+          theme_grey(base_size=8)
+        return(g)
       }) %>% setNames(unique(allData$int_method))
   }) %>% setNames(errVars)
   
+  exportVars <- c('testErr.ex.r','testErr.inc.r',
+                  'compareDiff.ex.r',
+                  'compareDiff.inc.r')
+  
+  exportVars %>% map(.f = function(ex) {
+    multi.page <- ggpubr::ggarrange(plotlist = varPlots[[ex]], 
+                                    nrow = 1, ncol = 1) 
+    ggpubr::ggexport(multi.page, 
+                     filename =
+                       paste0('plots/',filePattern,'_',ex,'_varPlots.pdf'),
+                     height = 8.25, width = 11.75)
+  })
   # plots showing relaitionship between test error values 
   # and earlier surface values
   # cross plots ----
   rmsesAll.m <- rmsesAll %>% 
     reshape2::melt(id.vars = c(gVars, 'testErr.ex.r'))
   
-  # i <- unique(allData$int_method)[1]
-  crossPlots <- unique(allData$int_method) %>% 
-    map(.f = function(i) {
+  crossPlots <-  1:length(unique(rmsesAll.m$variable)) %>% 
+    map(.f = function(vn) {
       df <- rmsesAll.m %>% 
-        dplyr::filter(int_method == i) %>% 
+        dplyr::filter(variable == unique(rmsesAll.m$variable)[vn]) %>% 
         mutate_if(is.factor,as.character)
       
-      p <- 1:length(unique(df$variable)) %>% 
-        map(.f = function(vn) {
-          ggplot(df %>% filter(variable == unique(df$variable)[vn])) +
-            geom_smooth(aes(x = testErr.ex.r,
-                            y =  value)) + 
+      # i <- allData$int_method[1]
+      p <- unique(allData$int_method) %>% 
+        map(.f = function(i) {
+          ggplot(df %>% dplyr::filter(int_method == i)) +
+            stat_smooth(aes(x = testErr.ex.r,
+                            y =  value),
+                        method = 'loess') + 
             facet_wrap(~ intpol_fid,
                        scales = 'free',
                        # ncol = 2, # n variables
-                       nrow = 3, # n sites
+                       nrow = 3 # n sites
             ) + 
-            ggtitle(paste(i,unique(df$variable)[vn],collapse=': '))
-        }) %>% setNames(unique(df$variable))
-    }) %>% setNames(unique(allData$int_method))
+            ggtitle(paste(i,unique(rmsesAll.m$variable)[vn],
+                          collapse=': ')) +
+            ylab(unique(rmsesAll.m$variable)[vn])
+        }) %>% setNames(unique(allData$int_method))
+    }) %>% setNames(unique(rmsesAll.m$variable))
+  
+  # export pdf
+  names(crossPlots) %>% 
+    map(.f = function(v) {
+      multi.page <- ggpubr::ggarrange(plotlist = crossPlots[[v]], 
+                                      nrow = 1, ncol = 1) 
+      ggpubr::ggexport(multi.page, 
+                       filename =
+                         paste0('plots/',filePattern,'_',v,
+                                '_crossPlots.pdf'),
+                       height = 8.25, width = 11.75)
+    })
+  
   
   # find best runs per error value
   # best runs ----
@@ -1542,7 +1583,7 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
         dplyr::select(-setdiff(errVars,x)) %>% 
         dplyr::rename('error_value' = x) %>% 
         mutate(error_value = as.numeric(error_value),
-               error_var = x)
+               error_var = all_of(x) )
     }) %>%
     dplyr::filter(error_var != 'trainingErr.r') %>% 
     left_join(allData[,c(gVars,'variable','value')] %>% 
@@ -1554,8 +1595,10 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
     dplyr::select(-c('variable', 'value'))
   
   # isoloate parameters for best runs
-  bestRuns.params <- bestRuns %>% left_join(allData) %>% 
-    dplyr::select(c(gVars,'bid','variable','value'))
+  bestRuns.params <- bestRuns %>% 
+    left_join(allData,
+              by = c("int_method", "run_no", "intpol_fid")) %>% 
+    dplyr::select(c(all_of(gVars),'bid','variable','value'))
   
   # error bar plots -----
   errBars <- ggplot(bestRuns) + 
@@ -1566,7 +1609,7 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
     ) + 
     facet_wrap(~ error_var) + 
     theme(legend.position = 'bottom')
-
+  
   # extract best rasters
   # convert raster data names to reflect real polygon fids
   # best rasters ----
@@ -1574,37 +1617,39 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
     map(~unique(.x$rmses$intpol_fid)) %>% 
     unlist(.)
   
-  # rename prep data ready for diff maps
-  fids <- prepData %>% map(~.x$pol$fid) %>% unlist()
-  names(prepData) <- as.character(fids)
-  
   # extract rasters to flat list
-  x <- 1
-  plot(rasData$`2`$orig.data$ras$layer.1)
+  # x <- 1
+  # as(rasData$`2`$tiles$a,'Raster')
+  # plot(rasData$`2`$orig.data$ras$layer.1)
   bestRas <- 1:nrow(bestRuns) %>% 
     map(.f = function(x) {
       df <- bestRuns[x,]
       intras <- rasData[[as.character(df$intpol_fid)]]$orig.maps$ras[[df$int_method]][[df$run_no]]
-      diffras <- rasData[[as.character(df$intpol_fid)]]$orig.data$ras$layer.1 - intras
+      diffras_a <- as(rasData[[as.character(df$intpol_fid)]]$tiles$a,'Raster') - intras
+      diffras_b <- as(rasData[[as.character(df$intpol_fid)]]$tiles$b,'Raster') - intras
       list(intras = intras,
-           diffras = diffras)
+           diff_a = diffras_a,
+           diff_b = diffras_b)
     }) %>% setNames(as.character(1:nrow(bestRuns)))
-  
   
   # split list into logical groupings & # extract original interpolated rasters, 
   # by map with lowest error per error measure
-  
   bestRas.l <- split.data.frame(bestRuns, bestRuns$error_var) %>% 
     map(~split(.x, .x$intpol_fid)) %>% map(~map(.x, .f = function(b) {
       list(ras = bestRas[b$bid],
-           params = b %>% left_join(bestRuns.params))
+           params = b %>% 
+             left_join(bestRuns.params %>% dplyr::select(-run_no) ))
     }) 
     # %>% setNames(b$int_method)
     )
   
+  # prepare polygons for plotting
+  allPol <- rasData %>% map(~.x$tiles$pol) %>% 
+    bind_rows()
+  
   # plot best ras
   # errRas <- bestRas.l[[1]]
-  # fidRas <- errRas$`3`
+  # fidRas <- errRas$`4`
   bestRasPlots <- bestRas.l %>% map(.f= function(errRas) {
     map(errRas, .f = function(fidRas) {
       
@@ -1615,12 +1660,19 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
                  type = 'int') %>% 
           left_join(bestRuns, by='bid')
         
-        df2 <- as.data.frame(rasterToPoints(r$diffras)) %>% 
+        df2 <- as.data.frame(rasterToPoints(r$diff_a)) %>% 
           dplyr::rename(elev = 3) %>% 
           mutate(bid = as.numeric(rn),
-                 type = 'diff') %>% 
+                 type = 'diff_a') %>% 
           left_join(bestRuns, by='bid')
-        rbind(df,df2)
+        
+        df3 <- as.data.frame(rasterToPoints(r$diff_b)) %>% 
+          dplyr::rename(elev = 3) %>% 
+          mutate(bid = as.numeric(rn),
+                 type = 'diff_b') %>% 
+          left_join(bestRuns, by='bid')
+        
+        rbind(df,df2,df3)
       })
       # parse parameters and RMSEs
       tmp <- fidRas$params %>%
@@ -1637,66 +1689,94 @@ analyseDat <- function(dirLoc = '/media/mal/working_files/quarry',
         dplyr::select(all_of(names(tmp))) %>% 
         bind_rows(tmp)
       
+      plotPol <- allPol %>% dplyr::filter(fid == unique(fidRas$params$intpol_fid))
+      
       elevPlots <- ggplot() +  
         geom_raster(data=allRasdf %>% filter(type == 'int'), 
                     aes(x=x, y=y, fill=elev)) + 
-        geom_label(data=df.l, label.size=0.1, size=2.75,
-                   aes(x=min(allRasdf$x),
-                       y=min(allRasdf$y),
-                       label=param_all),
-                   nudge_x=(max(allRasdf$x) - min(allRasdf$x))*0.2,
-                   nudge_y=(max(allRasdf$y) - min(allRasdf$y))*0.2) +
+        geom_sf(data = plotPol, fill=NA,color='black',
+                linetype = "dashed", size = 0.5) +
         scale_fill_viridis() +
-        coord_equal() +
+        coord_sf(datum = sf::st_crs(27700)) +
         theme(legend.position="none") + 
         facet_wrap(~ int_method) + 
         labs(title = paste0('Interpolated surfaces for site: ',unique(allRasdf$intpol_fid)),
              subtitle = paste0('Lowest error maps for ',unique(allRasdf$error_var))
         )
       
-      diffPlots <- ggplot() +  
-        geom_raster(data=allRasdf %>% filter(type == 'diff'), aes(x=x, y=y, fill=elev)) + 
-        geom_label(data=df.l, label.size=0.1, size=2.75,
-                   aes(x=min(allRasdf$x),
-                       y=min(allRasdf$y),
-                       label=param_all),
-                   nudge_x=(max(allRasdf$x) - min(allRasdf$x))*0.2,
-                   nudge_y=(max(allRasdf$y) - min(allRasdf$y))*0.2) +
-        scale_fill_viridis() +
-        coord_equal() +
-        theme(legend.position="bottom",
-              legend.key.width = unit(10,'mm')) + 
-        facet_wrap(~ int_method) + 
-        labs(title = paste0('Difference maps for site: ',unique(allRasdf$intpol_fid)),
-             subtitle = paste0('Lowest error maps for ',unique(allRasdf$error_var)),
-             fill = 'Difference (m)'
-        )
+      diffPlots <- c('diff_a','diff_b') %>% 
+        map(.f = function(difftype) {
+          ggplot() +  
+            geom_raster(data=allRasdf %>% filter(type == all_of(difftype)), 
+                        aes(x=x, y=y, fill=elev)) + 
+            geom_sf(data = plotPol, fill=NA,color='black',
+                    linetype = "dashed", size = 0.5) + 
+            scale_fill_viridis() +
+            coord_sf(datum = sf::st_crs(27700)) + 
+            theme(legend.position="bottom",
+                  legend.key.width = unit(10,'mm')) + 
+            facet_wrap(~ int_method) + 
+            labs(title = paste0('Difference maps for site: ',unique(allRasdf$intpol_fid)),
+                 subtitle = paste0('Lowest error maps for ',unique(allRasdf$error_var)),
+                 fill = 'Difference (m)'
+            )
+        }) %>% setNames(c('diff_a','diff_b'))
+      
+      gl <- list(elev = elevPlots,
+           diff_a = diffPlots$diff_a,
+           diff_b = diffPlots$diff_b)
       
       # check width of raster to make sure plot is wide enough for labels
-      minWidth <- 150
+      minWidth <- 200
       rasWidth <- (max(allRasdf$x) - min(allRasdf$x))
       if (rasWidth < minWidth) {
-        elevPlots <- elevPlots + lims(x = c( min(allRasdf$x)-((minWidth-rasWidth)/2),
-                                             max(allRasdf$x)+((minWidth-rasWidth)/2))
-        )
-        diffPlots <- diffPlots + lims(x = c( min(allRasdf$x)-((minWidth-rasWidth)/2),
-                                             max(allRasdf$x)+((minWidth-rasWidth)/2))
-        )
-      }
-      
-      list(elev = elevPlots,
-           diff = diffPlots)
+        
+        gl <- lapply(gl, function(g) {
+          newXmin <- min(allRasdf$x)-((minWidth-rasWidth))
+          newXmax <- max(allRasdf$x)+((minWidth-rasWidth))
+          g + lims(x = c(newXmin,newXmax)) + 
+            geom_label(data=df.l, label.size=0.1, size=2.75,
+                       aes(x=newXmin,
+                           y=min(allRasdf$y),
+                           label=param_all),
+                       nudge_x=30,
+                       nudge_y=30) 
+        })
+      } else {
+        gl <- lapply(gl, function(g) {
+          g + geom_label(data=df.l, label.size=0.1, size=2.75,
+                         aes(x=min(allRasdf$x),
+                             y=min(allRasdf$y),
+                             label=param_all),
+                         nudge_x=(max(allRasdf$x) - min(allRasdf$x))*0.2,
+                         nudge_y=(max(allRasdf$y) - min(allRasdf$y))*0.2
+                   )
+          }) 
+      } # else
+      return(gl)
     })
   })
+  # export to pdf
+  names(bestRasPlots) %>% 
+    map(.f = function(erv) {
+      multi.page <- ggpubr::ggarrange(plotlist = flatten(bestRasPlots[[erv]]), 
+                                      nrow = 1, ncol = 1) 
+      ggpubr::ggexport(multi.page, 
+                       filename =
+                         paste0('plots/',filePattern,'_',erv,
+                                '_bestRasPlots.pdf'),
+                       height = 8.25, width = 11.75)
+    })
+  
+  plots = list(bestRasPlots = bestRasPlots,
+               errPlots = errPlots,
+               varPlots = varPlots,
+               crossPlots = crossPlots)
   
   l <- list(bestRas.l = bestRas.l,
             bestRuns = bestRuns,
             bestRuns.params = bestRuns.params,
-            allData = allData,
-            plots = list(bestRasPlots = bestRasPlots,
-                         errPlots = errPlots,
-                         varPlots = varPlots,
-                         crossPlots = crossPlots))
+            allData = allData)
   return(l)
 }
 
@@ -1806,9 +1886,9 @@ bindCubic <- function(tag, outputDir="/media/mal/working_files/quarry") {
         datBicubic <- dat
         load(f[x])
         dat$orig.maps$ras$`GRASS Bicubic Spline` <- 
-        datBicubic$orig.maps$ras$`GRASS Bicubic Spline`
+          datBicubic$orig.maps$ras$`GRASS Bicubic Spline`
         dat$rmses <- rbind(datBicubic$rmses,
-                       dat$rmses)
+                           dat$rmses)
         f.out <- str_replace(f[x],tag,paste0(tag,'_all'))
         save(dat, file=f.out)
         file.remove(c(f[x],f.bi[x]))
@@ -1818,4 +1898,4 @@ bindCubic <- function(tag, outputDir="/media/mal/working_files/quarry") {
   m <- str_replace(tag,tag,paste0(tag,'_all'))
   return(m)
 }
- 
+
